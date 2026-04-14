@@ -645,7 +645,7 @@ export default function DecideScreen() {
   };
 
   return (
-    <View style={[styles.screen, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+    <View style={[styles.screen, { backgroundColor: colors.background, paddingTop: insets.top + 20 }]}>
       {mode === 'selector' && (
         <ModeSelector
           onSolo={() => setMode('solo-swipe')}

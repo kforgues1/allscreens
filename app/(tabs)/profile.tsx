@@ -196,7 +196,7 @@ export default function ProfileScreen() {
   return (
     <ScrollView
       style={[styles.screen, { backgroundColor: colors.background }]}
-      contentContainerStyle={[styles.content, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 100 }]}
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 100 }]}
       showsVerticalScrollIndicator={false}
     >
       {/* ── Avatar + name ── */}
