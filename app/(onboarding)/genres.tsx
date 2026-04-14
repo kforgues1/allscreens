@@ -12,7 +12,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '../../context/AuthContext';
-import { saveOnboardingData } from '../../lib/userProfile';
+import { saveOnboardingData, completeOnboarding } from '../../lib/userProfile';
 import { GENRES } from '../../constants/genres';
 import { useTheme } from '../../context/ThemeContext';
 import { db } from '../../lib/firebase';
@@ -68,8 +68,8 @@ export default function GenresScreen() {
     }
   };
 
-  const handleSkip = () => {
-    // Skip without saving — go to streaming in edit mode (keep old selections)
+  const handleSkip = async () => {
+    if (user) await completeOnboarding(user.uid).catch(() => {});
     router.push({ pathname: '/(onboarding)/streaming', params: { edit: '1' } });
   };
 

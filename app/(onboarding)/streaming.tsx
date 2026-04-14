@@ -13,7 +13,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '../../context/AuthContext';
-import { saveOnboardingData } from '../../lib/userProfile';
+import { saveOnboardingData, completeOnboarding } from '../../lib/userProfile';
 import { STREAMING_REGIONS } from '../../constants/streaming';
 import { useTheme } from '../../context/ThemeContext';
 import { db } from '../../lib/firebase';
@@ -79,7 +79,8 @@ export default function StreamingScreen() {
     }
   };
 
-  const handleSkip = () => {
+  const handleSkip = async () => {
+    if (user) await completeOnboarding(user.uid).catch(() => {});
     router.replace('/(tabs)/profile');
   };
 

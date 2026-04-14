@@ -22,7 +22,7 @@ export default function CompleteScreen() {
     setLoading(true);
     try {
       await completeOnboarding(user.uid);
-      router.replace('/(tabs)/browse');
+      router.replace('/(tabs)/explore');
     } finally {
       setLoading(false);
     }
