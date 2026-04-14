@@ -81,7 +81,7 @@ export default function StreamingScreen() {
 
   const handleSkip = async () => {
     if (user) await completeOnboarding(user.uid).catch(() => {});
-    router.replace('/(tabs)/profile');
+    router.replace('/(tabs)/explore');
   };
 
   if (initialising) {

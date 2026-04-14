@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 
 interface AuthContextValue {
@@ -17,23 +17,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [onboardingComplete, setOnboardingComplete] = useState(false);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (u) => {
+    let unsubFirestore: (() => void) | null = null;
+
+    const unsubAuth = onAuthStateChanged(auth, (u) => {
+      // Clean up any previous Firestore listener before setting up a new one
+      if (unsubFirestore) { unsubFirestore(); unsubFirestore = null; }
+
       setUser(u);
       if (!u) {
         setOnboardingComplete(false);
         setLoading(false);
         return;
       }
-      try {
-        const snap = await getDoc(doc(db, 'users', u.uid));
-        setOnboardingComplete(snap.data()?.onboardingComplete === true);
-      } catch {
-        setOnboardingComplete(false);
-      } finally {
-        setLoading(false);
-      }
+
+      // Use onSnapshot so the context immediately reflects Firestore writes
+      // (e.g. completeOnboarding()) without waiting for the next auth event
+      unsubFirestore = onSnapshot(
+        doc(db, 'users', u.uid),
+        snap => {
+          setOnboardingComplete(snap.data()?.onboardingComplete === true);
+          setLoading(false);
+        },
+        () => {
+          setOnboardingComplete(false);
+          setLoading(false);
+        },
+      );
     });
-    return unsub;
+
+    return () => {
+      unsubAuth();
+      if (unsubFirestore) unsubFirestore();
+    };
   }, []);
 
   return (

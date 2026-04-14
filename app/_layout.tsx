@@ -22,7 +22,7 @@ function NavController() {
     } else {
       if (currentSegment !== '(tabs)') router.replace('/(tabs)/explore');
     }
-  }, [user, loading, onboardingComplete, segments]);
+  }, [user, loading, onboardingComplete]);
 
   return null;
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import Svg, { Circle, Path, Rect, Line } from 'react-native-svg';
 import {
   View, Text, TouchableOpacity, StyleSheet, Platform,
@@ -19,6 +19,7 @@ import { db } from '../../lib/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { getWatchableMovies, type Movie } from '../../lib/streaming-filter';
+import { getTrending, type MovieResult } from '../../lib/tmdb';
 import { TMDB_IMAGE_BASE } from '../../constants/api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -109,6 +110,85 @@ function GroupModeIcon() {
   );
 }
 
+// ─── Skeleton / error / empty states ─────────────────────────────────────────
+
+function MovieReelIcon() {
+  return (
+    <Svg width={32} height={32} viewBox="0 0 32 32" fill="none">
+      <Circle cx={16} cy={16} r={14} stroke="#6D28D9" strokeWidth={1.5} />
+      <Circle cx={16} cy={16} r={5} stroke="#6D28D9" strokeWidth={1.5} />
+      <Circle cx={8} cy={8} r={2} fill="#6D28D9" />
+      <Circle cx={24} cy={8} r={2} fill="#6D28D9" />
+      <Circle cx={8} cy={24} r={2} fill="#6D28D9" />
+      <Circle cx={24} cy={24} r={2} fill="#6D28D9" />
+    </Svg>
+  );
+}
+
+function SwipeCardSkeleton() {
+  const anim = useRef(new Animated.Value(0.4)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(anim, { toValue: 1, duration: 600, useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 0.4, duration: 600, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [anim]);
+  return (
+    <ScrollView style={styles.swipeScroll} contentContainerStyle={styles.swipeWrap}>
+      <Animated.View style={[styles.swipeCard, styles.skeletonCard, { opacity: anim }]}>
+        <View style={[styles.swipePoster, styles.skeletonBg]} />
+      </Animated.View>
+      <View style={styles.actionRow}>
+        <View style={[styles.skipBtn, styles.skeletonBg]} />
+        <View style={[styles.acceptBtn, styles.skeletonBg]} />
+      </View>
+    </ScrollView>
+  );
+}
+
+function DecideFetchError({ onRetry }: { onRetry: () => void }) {
+  return (
+    <View style={styles.centered}>
+      <View style={styles.errorIconWrap}>
+        <Text style={styles.errorTriangle}>⚠</Text>
+      </View>
+      <Text style={styles.errorTitle}>something went wrong</Text>
+      <TouchableOpacity onPress={onRetry}>
+        <Text style={styles.errorRetry}>tap to try again</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+function EmptyQueueState({ onBrowseAll }: { onBrowseAll: () => void }) {
+  return (
+    <View style={styles.centered}>
+      <View style={styles.emptyIllustration}>
+        <MovieReelIcon />
+      </View>
+      <Text style={styles.emptyQueueTitle}>no movies found for your streaming services</Text>
+      <TouchableOpacity
+        style={[styles.primaryBtn, gradientStyle, { marginTop: 8 }]}
+        onPress={() => router.push({ pathname: '/(onboarding)/streaming', params: { edit: '1' } })}
+        activeOpacity={0.85}
+      >
+        <Text style={styles.primaryBtnText}>update streaming services</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.secondaryBtn, { marginTop: 8 }]}
+        onPress={onBrowseAll}
+        activeOpacity={0.85}
+      >
+        <Text style={styles.secondaryBtnText}>browse all popular movies</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 // ─── Mode Selector ────────────────────────────────────────────────────────────
 
 function ModeSelector({ onSolo, onGroup }: { onSolo: () => void; onGroup: () => void }) {
@@ -147,11 +227,48 @@ function SoloSwipe({
   const [index, setIndex] = useState(0);
   const [picks, setPicks] = useState<Movie[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const pan = useRef(new Animated.ValueXY()).current;
 
   useEffect(() => {
-    getWatchableMovies(uid).then(m => { setMovies(m); setLoading(false); });
-  }, [uid]);
+    let cancelled = false;
+    setLoading(true);
+    setError(false);
+    (async () => {
+      try {
+        let list = await getWatchableMovies(uid);
+        if (list.length > 0 && list.length < 5) {
+          const [p1, p2] = await Promise.all([
+            getTrending(1).catch(() => [] as MovieResult[]),
+            getTrending(2).catch(() => [] as MovieResult[]),
+          ]);
+          const existingIds = new Set(list.map(m => m.id));
+          const padding = [...p1, ...p2]
+            .filter(m => !existingIds.has(m.id))
+            .slice(0, 20 - list.length) as Movie[];
+          list = [...list, ...padding];
+        }
+        if (!cancelled) { setMovies(list); setLoading(false); }
+      } catch {
+        if (!cancelled) { setError(true); setLoading(false); }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [uid, retryCount]);
+
+  const handleBrowseAll = async () => {
+    setLoading(true);
+    setError(false);
+    try {
+      const [p1, p2] = await Promise.all([
+        getTrending(1).catch(() => [] as MovieResult[]),
+        getTrending(2).catch(() => [] as MovieResult[]),
+      ]);
+      setMovies([...p1, ...p2] as Movie[]);
+    } catch { setError(true); }
+    finally { setLoading(false); }
+  };
 
   const panResponder = useRef(
     PanResponder.create({
@@ -186,14 +303,9 @@ function SoloSwipe({
 
   const current = movies[index];
 
-  if (loading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator color="#6D28D9" />
-        <Text style={styles.loadingText}>finding movies for you…</Text>
-      </View>
-    );
-  }
+  if (loading) return <SwipeCardSkeleton />;
+  if (error) return <DecideFetchError onRetry={() => setRetryCount(c => c + 1)} />;
+  if (movies.length === 0) return <EmptyQueueState onBrowseAll={handleBrowseAll} />;
 
   const rotate = pan.x.interpolate({ inputRange: [-200, 0, 200], outputRange: ['-8deg', '0deg', '8deg'] });
 
@@ -499,11 +611,23 @@ function GroupSwipe({
   const [yesCount, setYesCount] = useState(0);
   const [matched, setMatched] = useState<Movie[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
-    // Use merged watchable movies for the group
-    getWatchableMovies(uid).then(m => { setMovies(m); setLoading(false); });
-  }, [uid]);
+    let cancelled = false;
+    setLoading(true);
+    setError(false);
+    (async () => {
+      try {
+        const list = await getWatchableMovies(uid);
+        if (!cancelled) { setMovies(list); setLoading(false); }
+      } catch {
+        if (!cancelled) { setError(true); setLoading(false); }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [uid, retryCount]);
 
   // Watch votes in Firestore — when 3 matches found, advance
   useEffect(() => {
@@ -541,9 +665,8 @@ function GroupSwipe({
 
   const current = movies[index];
 
-  if (loading) {
-    return <View style={styles.centered}><ActivityIndicator color="#6D28D9" /></View>;
-  }
+  if (loading) return <SwipeCardSkeleton />;
+  if (error) return <DecideFetchError onRetry={() => setRetryCount(c => c + 1)} />;
 
   if (!current || index >= movies.length) {
     return (
@@ -884,4 +1007,23 @@ const styles = StyleSheet.create({
     paddingVertical: 10, paddingHorizontal: 24,
   },
   backToBrowseText: { fontSize: 13, fontWeight: '300', color: '#6D28D9' },
+
+  // ── Skeleton ───────────────────────────────────────────────────────────────
+  skeletonCard: { backgroundColor: '#EDE9FE' },
+  skeletonBg: { backgroundColor: '#EDE9FE' },
+
+  // ── Fetch error ────────────────────────────────────────────────────────────
+  errorIconWrap: {
+    width: 44, height: 44, borderRadius: 12,
+    backgroundColor: '#EDE9FE', alignItems: 'center', justifyContent: 'center',
+  },
+  errorTriangle: { fontSize: 18 },
+  errorTitle: { fontSize: 13, fontWeight: '300', color: '#4C1D95' },
+  errorRetry: { fontSize: 11, color: '#A78BFA' },
+
+  // ── Empty queue ────────────────────────────────────────────────────────────
+  emptyQueueTitle: {
+    fontSize: 13, fontWeight: '300', color: '#4C1D95',
+    textAlign: 'center', paddingHorizontal: 24,
+  },
 });

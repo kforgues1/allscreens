@@ -70,7 +70,7 @@ export default function GenresScreen() {
 
   const handleSkip = async () => {
     if (user) await completeOnboarding(user.uid).catch(() => {});
-    router.push({ pathname: '/(onboarding)/streaming', params: { edit: '1' } });
+    router.replace('/(tabs)/explore');
   };
 
 

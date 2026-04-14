@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  StyleSheet, ActivityIndicator, Image, Platform, KeyboardAvoidingView,
+  StyleSheet, ActivityIndicator, Image, Platform, KeyboardAvoidingView, Animated,
 } from 'react-native';
 import { router } from 'expo-router';
 import Svg, { Circle, Path, Rect, Line } from 'react-native-svg';
@@ -220,6 +220,56 @@ function ServiceBadge({ name }: { name: string }) {
   return (
     <View style={styles.serviceBadge}>
       <Text style={styles.serviceBadgeText}>{name}</Text>
+    </View>
+  );
+}
+
+// ─── Skeleton + error states ─────────────────────────────────────────────────
+
+function SkeletonListCard() {
+  const anim = useRef(new Animated.Value(0.4)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(anim, { toValue: 1, duration: 600, useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 0.4, duration: 600, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [anim]);
+  return <Animated.View style={[styles.movieCard, styles.skeletonCard, { opacity: anim }]} />;
+}
+
+function SkeletonGridCell() {
+  const anim = useRef(new Animated.Value(0.4)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(anim, { toValue: 1, duration: 600, useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 0.4, duration: 600, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [anim]);
+  return (
+    <Animated.View style={[styles.watchGridCell, { opacity: anim }]}>
+      <View style={[styles.watchPoster, styles.skeletonBg]} />
+    </Animated.View>
+  );
+}
+
+function FetchError({ onRetry }: { onRetry: () => void }) {
+  return (
+    <View style={styles.fetchError}>
+      <View style={styles.fetchErrorIcon}>
+        <Text style={styles.fetchErrorTriangle}>⚠</Text>
+      </View>
+      <Text style={styles.fetchErrorTitle}>something went wrong</Text>
+      <TouchableOpacity onPress={onRetry}>
+        <Text style={styles.fetchErrorRetry}>tap to try again</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -613,10 +663,14 @@ function DiscoverTab({ uid, onMovieTap }: {
 }) {
   const [shelves, setShelves] = useState<DiscoverShelf[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     if (!uid) return;
     let cancelled = false;
+    setLoading(true);
+    setError(false);
     (async () => {
       try {
         const userSnap = await getDoc(doc(db, 'users', uid));
@@ -665,14 +719,26 @@ function DiscoverTab({ uid, onMovieTap }: {
         if (genreResults.length > 0) result.push({ id: 'genres', label: 'your genres', movies: genreResults.slice(0, 5).map(toMovie) });
 
         setShelves(result);
-      } catch { /* ignore */ }
+      } catch { if (!cancelled) setError(true); }
       finally { if (!cancelled) setLoading(false); }
     })();
     return () => { cancelled = true; };
-  }, [uid]);
+  }, [uid, retryCount]);
 
   if (loading) {
-    return <View style={styles.centered}><ActivityIndicator color="#6D28D9" /></View>;
+    return (
+      <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.shelf}>
+          <SkeletonListCard />
+          <SkeletonListCard />
+          <SkeletonListCard />
+        </View>
+      </ScrollView>
+    );
+  }
+
+  if (error) {
+    return <FetchError onRetry={() => setRetryCount(c => c + 1)} />;
   }
 
   return (
@@ -714,12 +780,11 @@ function DiscoverTab({ uid, onMovieTap }: {
 
 // ─── Friends Tab ──────────────────────────────────────────────────────────────
 
-function FriendsTab({ uid, userInitials, onMovieTap, onAddFriends, onLogWatch }: {
+function FriendsTab({ uid, userInitials, onMovieTap, onAddFriends }: {
   uid: string;
   userInitials: string;
   onMovieTap: (m: MovieDetail) => void;
   onAddFriends: () => void;
-  onLogWatch: () => void;
 }) {
   const [friendReviews, setFriendReviews] = useState<FriendReview[]>(MOCK_FRIEND_REVIEWS);
   const [ownReviews, setOwnReviews] = useState<FriendReview[]>([]);
@@ -802,12 +867,6 @@ function FriendsTab({ uid, userInitials, onMovieTap, onAddFriends, onLogWatch }:
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* Log a review pill */}
-      <View style={[styles.fabWrap, { bottom: 88 }]}>
-        <TouchableOpacity style={styles.fab} onPress={onLogWatch} activeOpacity={0.85}>
-          <Text style={styles.fabText}>+ log a review</Text>
-        </TouchableOpacity>
-      </View>
     </View>
   );
 }
@@ -822,26 +881,48 @@ function WatchedTab({ uid, onMovieTap, onLogWatch, onEditWatch }: {
 }) {
   const [history, setHistory] = useState<WatchEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     if (!uid) return;
+    setError(false);
     const q = query(collection(db, 'users', uid, 'watchHistory'), orderBy('watchedAt', 'desc'));
-    return onSnapshot(q, snap => {
-      setHistory(snap.docs.map(d => ({
-        id: d.id,
-        movieId: d.data().movieId,
-        movieTitle: d.data().movieTitle,
-        posterPath: d.data().posterPath ?? null,
-        rating: d.data().rating ?? 0,
-        reviewText: d.data().reviewText ?? '',
-        watchedAt: d.data().watchedAt,
-      })));
-      setLoading(false);
-    });
-  }, [uid]);
+    return onSnapshot(
+      q,
+      snap => {
+        setHistory(snap.docs.map(d => ({
+          id: d.id,
+          movieId: d.data().movieId,
+          movieTitle: d.data().movieTitle,
+          posterPath: d.data().posterPath ?? null,
+          rating: d.data().rating ?? 0,
+          reviewText: d.data().reviewText ?? '',
+          watchedAt: d.data().watchedAt,
+        })));
+        setLoading(false);
+      },
+      () => { setError(true); setLoading(false); },
+    );
+  }, [uid, retryCount]);
 
   if (loading) {
-    return <View style={styles.centered}><ActivityIndicator color="#6D28D9" /></View>;
+    return (
+      <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.watchGrid}>
+          <SkeletonGridCell />
+          <SkeletonGridCell />
+          <SkeletonGridCell />
+          <SkeletonGridCell />
+          <SkeletonGridCell />
+          <SkeletonGridCell />
+        </View>
+      </ScrollView>
+    );
+  }
+
+  if (error) {
+    return <FetchError onRetry={() => setRetryCount(c => c + 1)} />;
   }
 
   if (history.length === 0) {
@@ -981,7 +1062,6 @@ export default function ExploreScreen() {
           userInitials={userInitials}
           onMovieTap={setMovieDetail}
           onAddFriends={() => setAddFriendsOpen(true)}
-          onLogWatch={() => openLogWatch()}
         />
       )}
       {innerTab === 'watched' && (
@@ -1284,4 +1364,18 @@ const styles = StyleSheet.create({
   starRow: { flexDirection: 'row', gap: 1 },
   starFilled: { color: '#6D28D9' },
   starEmpty: { color: '#DDD6FE' },
+
+  // ── Skeleton ───────────────────────────────────────────────────────────────
+  skeletonCard: { height: 68, backgroundColor: '#EDE9FE', borderColor: 'transparent' },
+  skeletonBg: { backgroundColor: '#EDE9FE' },
+
+  // ── Fetch error ────────────────────────────────────────────────────────────
+  fetchError: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, padding: 32 },
+  fetchErrorIcon: {
+    width: 44, height: 44, borderRadius: 12,
+    backgroundColor: '#EDE9FE', alignItems: 'center', justifyContent: 'center',
+  },
+  fetchErrorTriangle: { fontSize: 18 },
+  fetchErrorTitle: { fontSize: 13, fontWeight: '300', color: '#4C1D95' },
+  fetchErrorRetry: { fontSize: 11, color: '#A78BFA' },
 });
