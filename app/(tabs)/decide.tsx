@@ -540,7 +540,7 @@ function GroupWaiting({
     return <View style={styles.centered}><ActivityIndicator color="#6D28D9" /></View>;
   }
 
-  const inviteUrl = `https://allscreens.app/join/${session.code}`;
+  const inviteUrl = `https://kforgues1.github.io/allscreens/join/${session.code}`;
   const canStart = session.members.length >= 2;
 
   const handleCopy = () => {
@@ -550,7 +550,17 @@ function GroupWaiting({
   };
 
   const handleShare = () => {
-    Share.share({ message: `join my allscreens session — let's pick something to watch together: ${inviteUrl}` });
+    if (Platform.OS === 'web' && typeof navigator !== 'undefined') {
+      navigator.clipboard?.writeText(inviteUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      return;
+    }
+    Share.share({
+      message: `join my allscreens session 🎬 let's pick something to watch together\n\n${inviteUrl}`,
+      url: inviteUrl,
+      title: 'join my allscreens session',
+    });
   };
 
   return (

@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import PhoneFrame from '../../components/PhoneFrame';
@@ -87,8 +88,11 @@ export default function SignUpScreen() {
         createdAt: serverTimestamp(),
         onboardingComplete: false,
       });
-      if (sessionCode) {
-        router.replace({ pathname: '/join/[code]', params: { code: sessionCode } });
+      const pendingCode =
+        sessionCode || (await AsyncStorage.getItem('pendingSessionCode').catch(() => null));
+      if (pendingCode) {
+        await AsyncStorage.removeItem('pendingSessionCode').catch(() => {});
+        router.replace({ pathname: '/join/[code]', params: { code: pendingCode } });
       } else {
         router.replace('/(auth)/welcome');
       }

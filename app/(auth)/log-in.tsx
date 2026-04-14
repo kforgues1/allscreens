@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import PhoneFrame from '../../components/PhoneFrame';
@@ -70,8 +71,11 @@ export default function LogInScreen() {
     setLoading(true);
     try {
       const { user } = await signInWithEmailAndPassword(auth, email.trim(), password);
-      if (sessionCode) {
-        router.replace({ pathname: '/join/[code]', params: { code: sessionCode } });
+      const pendingCode =
+        sessionCode || (await AsyncStorage.getItem('pendingSessionCode').catch(() => null));
+      if (pendingCode) {
+        await AsyncStorage.removeItem('pendingSessionCode').catch(() => {});
+        router.replace({ pathname: '/join/[code]', params: { code: pendingCode } });
         return;
       }
       const snap = await getDoc(doc(db, 'users', user.uid));

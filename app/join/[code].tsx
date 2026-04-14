@@ -5,9 +5,12 @@ import {
 import { useLocalSearchParams, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { doc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { db } from '../../lib/firebase';
 import { useAuth } from '../../context/AuthContext';
 import PhoneFrame from '../../components/PhoneFrame';
+
+const PENDING_KEY = 'pendingSessionCode';
 
 const wordmarkStyle =
   Platform.OS === 'web'
@@ -26,7 +29,7 @@ const gradientBtnStyle =
     : { backgroundColor: '#6D28D9' };
 
 export default function JoinSessionScreen() {
-  const { code } = useLocalSearchParams<{ code: string }>();
+  const { code: codeParam } = useLocalSearchParams<{ code: string }>();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
 
@@ -34,30 +37,52 @@ export default function JoinSessionScreen() {
   const [error, setError] = useState('');
   const [joining, setJoining] = useState(false);
 
+  // Persist the session code to AsyncStorage so it survives the auth flow.
+  // Do this as early as possible when the user is not yet logged in.
+  useEffect(() => {
+    if (!user && codeParam) {
+      AsyncStorage.setItem(PENDING_KEY, codeParam).catch(() => {});
+    }
+  }, [user, codeParam]);
+
   // Fetch host name for the unauthenticated invite preview
   useEffect(() => {
-    if (!code) return;
-    getDoc(doc(db, 'sessions', code))
+    if (!codeParam) return;
+    getDoc(doc(db, 'sessions', codeParam))
       .then(snap => {
         const name = snap.data()?.hostName as string | undefined;
         if (name) setHostName(name);
       })
       .catch(() => {});
-  }, [code]);
+  }, [codeParam]);
 
-  // Logged-in: validate session and join immediately
+  // Logged-in: resolve code (param OR AsyncStorage), join, and navigate
   useEffect(() => {
-    if (!user || !code) return;
+    if (!user) return;
     joinAndNavigate();
-  }, [user, code]);
+  }, [user]);
 
   const joinAndNavigate = async () => {
-    if (!user || !code) return;
+    if (!user) return;
+
+    // Resolve the session code — prefer URL param, fall back to AsyncStorage
+    let code = codeParam;
+    if (!code) {
+      code = (await AsyncStorage.getItem(PENDING_KEY).catch(() => null)) ?? '';
+    }
+    // Always clear the pending key once we have it
+    await AsyncStorage.removeItem(PENDING_KEY).catch(() => {});
+
+    if (!code) {
+      setError('no session code found');
+      return;
+    }
+
     setJoining(true);
     try {
       const snap = await getDoc(doc(db, 'sessions', code));
       if (!snap.exists() || snap.data()?.status === 'ended') {
-        setError('this session has ended or doesn\'t exist');
+        setError("this session has ended or doesn't exist");
         setJoining(false);
         return;
       }
@@ -70,12 +95,14 @@ export default function JoinSessionScreen() {
       const userSnap = await getDoc(doc(db, 'users', user.uid));
       const d = userSnap.data();
       const nameFromParts = `${d?.firstName ?? ''} ${d?.lastName ?? ''}`.trim();
-      const displayName = ((d?.displayName as string | undefined) ?? nameFromParts) || (user.email ?? user.uid);
+      const displayName =
+        ((d?.displayName as string | undefined) ?? nameFromParts) || (user.email ?? user.uid);
 
       await updateDoc(doc(db, 'sessions', code), {
         members: arrayUnion(user.uid),
         [`memberNames.${user.uid}`]: displayName,
       });
+      // Use replace throughout so the back stack stays clean (Part 6)
       router.replace({ pathname: '/(tabs)/decide', params: { joinCode: code } });
     } catch {
       setError('could not join session — try again');
@@ -88,10 +115,15 @@ export default function JoinSessionScreen() {
   if (!user) {
     return (
       <PhoneFrame>
-        <View style={[styles.screen, { paddingTop: (insets.top || 0) + 32, paddingBottom: (insets.bottom || 0) + 32 }]}>
+        <View
+          style={[
+            styles.screen,
+            { paddingTop: (insets.top || 0) + 32, paddingBottom: (insets.bottom || 0) + 32 },
+          ]}
+        >
           <Text style={[styles.wordmark, wordmarkStyle]}>allscreens</Text>
           <View style={{ height: 8 }} />
-          <Text style={styles.invitedLabel}>you've been invited</Text>
+          <Text style={styles.invitedLabel}>you've been invited to watch something</Text>
           {hostName ? (
             <Text style={styles.byLabel}>by {hostName}</Text>
           ) : null}
@@ -118,7 +150,9 @@ export default function JoinSessionScreen() {
           <View style={styles.btnGroup}>
             <TouchableOpacity
               style={[styles.primaryBtn, gradientBtnStyle]}
-              onPress={() => router.push({ pathname: '/(auth)/sign-up', params: { sessionCode: code } })}
+              onPress={() =>
+                router.push({ pathname: '/(auth)/sign-up', params: { sessionCode: codeParam } })
+              }
               activeOpacity={0.85}
             >
               <Text style={styles.primaryBtnText}>create an account</Text>
@@ -126,7 +160,9 @@ export default function JoinSessionScreen() {
 
             <TouchableOpacity
               style={styles.secondaryBtn}
-              onPress={() => router.push({ pathname: '/(auth)/log-in', params: { sessionCode: code } })}
+              onPress={() =>
+                router.push({ pathname: '/(auth)/log-in', params: { sessionCode: codeParam } })
+              }
               activeOpacity={0.8}
             >
               <Text style={styles.secondaryBtnText}>log in</Text>
@@ -178,21 +214,21 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   invitedLabel: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '300',
     color: '#4C1D95',
     textAlign: 'center',
     marginTop: 8,
   },
   byLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '300',
     color: '#A78BFA',
     textAlign: 'center',
     marginTop: 4,
   },
 
-  // ── Movie reel ──────────────────────────────────────────────────────────────
+  // ── Movie reel ─────────────────────────────────────────────────────────────
   reelWrap: {
     marginVertical: 36,
     alignItems: 'center',
@@ -220,7 +256,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#EDE9FE',
   },
 
-  // ── Buttons ──────────────────────────────────────────────────────────────────
+  // ── Buttons ────────────────────────────────────────────────────────────────
   btnGroup: {
     alignSelf: 'stretch',
     gap: 12,
