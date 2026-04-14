@@ -6,6 +6,7 @@ import {
 import { router } from 'expo-router';
 import Svg, { Circle, Path, Rect, Line } from 'react-native-svg';
 import { TMDB_API_KEY, TMDB_BASE_URL, TMDB_IMAGE_BASE } from '../../constants/api';
+import { toISORegion } from '../../constants/regions';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   collection, addDoc, serverTimestamp, query, orderBy,
@@ -259,9 +260,10 @@ function PencilIcon() {
 
 // ─── Movie Detail Sheet ───────────────────────────────────────────────────────
 
-function MovieDetailSheet({ movie, uid, onClose, onDecide }: {
+function MovieDetailSheet({ movie, uid, region, onClose, onDecide }: {
   movie: MovieDetail;
   uid: string;
+  region: string;
   onClose: () => void;
   onDecide: () => void;
 }) {
@@ -273,8 +275,8 @@ function MovieDetailSheet({ movie, uid, onClose, onDecide }: {
 
   useEffect(() => {
     fetchMovieDetail(movie.id).then(setDetail);
-    fetchWatchProviders(movie.id, 'US').then(setProviders);
-  }, [movie.id]);
+    fetchWatchProviders(movie.id, region).then(setProviders);
+  }, [movie.id, region]);
 
   const handleRating = async (n: number) => {
     setRating(n);
@@ -622,7 +624,7 @@ function DiscoverTab({ uid, onMovieTap }: {
         const userGenres: string[] = ((userData.genres ?? []) as string[]).map((g: string) => g.toLowerCase());
         const genreIds = userGenres.map(g => GENRE_ID_MAP[g]).filter((id): id is number => !!id);
         const userServices: string[] = ((userData.streamingServices ?? []) as string[]).map((s: string) => s.toLowerCase());
-        const userRegion: string = userData.region ?? userData.streamingRegion ?? 'US';
+        const userRegion: string = toISORegion(userData.region ?? userData.streamingRegion ?? 'US');
 
         // Get source movies for "because you liked"
         const historySnap = await getDocs(
@@ -926,8 +928,17 @@ export default function ExploreScreen() {
   const [logWatchOpen, setLogWatchOpen] = useState(false);
   const [editingWatch, setEditingWatch] = useState<WatchEntry | null>(null);
   const [addFriendsOpen, setAddFriendsOpen] = useState(false);
+  const [userRegion, setUserRegion] = useState('US');
 
   const uid = user?.uid ?? '';
+
+  useEffect(() => {
+    if (!uid) return;
+    getDoc(doc(db, 'users', uid)).then(snap => {
+      const raw = snap.data()?.region ?? snap.data()?.streamingRegion ?? 'US';
+      setUserRegion(toISORegion(raw));
+    }).catch(() => {});
+  }, [uid]);
   const displayName = (user?.displayName ?? '');
   const parts = displayName.split(' ');
   const userInitials = ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || 'ME';
@@ -988,6 +999,7 @@ export default function ExploreScreen() {
         <MovieDetailSheet
           movie={movieDetail}
           uid={uid}
+          region={userRegion}
           onClose={() => setMovieDetail(null)}
           onDecide={() => { setMovieDetail(null); router.replace('/(tabs)/decide'); }}
         />

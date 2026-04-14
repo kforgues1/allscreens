@@ -5,6 +5,7 @@ import {
   discoverMoviesByGenres, getMovieRecommendations, type MovieResult,
 } from './tmdb';
 import { TMDB_API_KEY, TMDB_BASE_URL } from '../constants/api';
+import { toISORegion } from '../constants/regions';
 
 export type Movie = MovieResult & {
   runtime?: number;
@@ -69,7 +70,7 @@ export async function getWatchableMovies(uid: string): Promise<Movie[]> {
     const snap = await getDoc(doc(db, 'users', uid));
     const data = snap.data();
     userServices = ((data?.streamingServices as string[]) ?? []).map((s: string) => s.toLowerCase());
-    userRegion = (data?.region ?? data?.streamingRegion ?? DEFAULT_REGION) as string;
+    userRegion = toISORegion((data?.region ?? data?.streamingRegion ?? DEFAULT_REGION) as string);
     const userGenres: string[] = ((data?.genres as string[]) ?? []).map((g: string) => g.toLowerCase());
     userGenreIds = userGenres.map(g => GENRE_ID_MAP[g]).filter((id): id is number => id !== undefined);
     favouriteMovieIds = (

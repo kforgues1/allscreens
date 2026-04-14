@@ -10,6 +10,7 @@ import {
   query, where, getDocs, limit,
 } from 'firebase/firestore';
 import { db, auth } from '../../lib/firebase';
+import { STREAMING_REGIONS } from '../../constants/streaming';
 import { signOut } from 'firebase/auth';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
@@ -190,6 +191,7 @@ export default function ProfileScreen() {
 
   const fullName = `${profile.firstName} ${profile.lastName}`.trim();
   const userInitials = initials(profile.firstName, profile.lastName);
+  const regionLabel = STREAMING_REGIONS.find(r => r.code === profile.region)?.label ?? profile.region;
   const servicesLabel = profile.streamingServices.length
     ? profile.streamingServices.join(', ')
     : 'none set';
@@ -207,7 +209,7 @@ export default function ProfileScreen() {
           <Text style={styles.bigAvatarText}>{userInitials}</Text>
         </View>
         <Text style={styles.userName}>{fullName || 'your name'}</Text>
-        <Text style={styles.userMeta}>{profile.region} · {friends.length} friends</Text>
+        <Text style={styles.userMeta}>{regionLabel} · {friends.length} friends</Text>
         <TouchableOpacity
           style={styles.editPill}
           onPress={() => router.push({ pathname: '/(onboarding)/genres', params: { edit: '1' } })}
@@ -231,7 +233,7 @@ export default function ProfileScreen() {
         <View style={styles.divider} />
         <View style={styles.settingsRow}>
           <Text style={styles.settingsLabel}>region</Text>
-          <Text style={styles.settingsValue}>{profile.region}</Text>
+          <Text style={styles.settingsValue}>{regionLabel}</Text>
         </View>
       </View>
 
