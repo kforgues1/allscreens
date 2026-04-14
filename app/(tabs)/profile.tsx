@@ -208,7 +208,7 @@ export default function ProfileScreen() {
         <Text style={styles.userMeta}>{profile.region} · {friends.length} friends</Text>
         <TouchableOpacity
           style={styles.editPill}
-          onPress={() => router.push('/(onboarding)/genres')}
+          onPress={() => router.push({ pathname: '/(onboarding)/genres', params: { edit: '1' } })}
           activeOpacity={0.8}
         >
           <Text style={styles.editPillText}>edit profile</Text>
@@ -217,12 +217,12 @@ export default function ProfileScreen() {
 
       {/* ── Settings card ── */}
       <View style={styles.card}>
-        <TouchableOpacity style={styles.settingsRow} onPress={() => router.push('/(onboarding)/streaming')} activeOpacity={0.8}>
+        <TouchableOpacity style={styles.settingsRow} onPress={() => router.push({ pathname: '/(onboarding)/streaming', params: { edit: '1' } })} activeOpacity={0.8}>
           <Text style={styles.settingsLabel}>streaming</Text>
           <Text style={styles.settingsValue} numberOfLines={1}>{servicesLabel}</Text>
         </TouchableOpacity>
         <View style={styles.divider} />
-        <TouchableOpacity style={styles.settingsRow} onPress={() => router.push('/(onboarding)/genres')} activeOpacity={0.8}>
+        <TouchableOpacity style={styles.settingsRow} onPress={() => router.push({ pathname: '/(onboarding)/genres', params: { edit: '1' } })} activeOpacity={0.8}>
           <Text style={styles.settingsLabel}>genres</Text>
           <Text style={styles.settingsValue}>{genresLabel}</Text>
         </TouchableOpacity>

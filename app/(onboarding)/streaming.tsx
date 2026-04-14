@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,13 +9,15 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '../../context/AuthContext';
 import { saveOnboardingData } from '../../lib/userProfile';
 import { STREAMING_REGIONS } from '../../constants/streaming';
 import ProgressBar from '../../components/ProgressBar';
 import { useTheme } from '../../context/ThemeContext';
+import { db } from '../../lib/firebase';
 
 const gradientBtnStyle =
   Platform.OS === 'web'
@@ -26,10 +28,28 @@ export default function StreamingScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const { edit } = useLocalSearchParams<{ edit?: string }>();
+  const isEdit = edit === '1';
 
   const [regionCode, setRegionCode] = useState('CA');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
+  const [initialising, setInitialising] = useState(isEdit);
+
+  // In edit mode, pre-populate with saved region + services
+  useEffect(() => {
+    if (!isEdit || !user) { setInitialising(false); return; }
+    getDoc(doc(db, 'users', user.uid))
+      .then(snap => {
+        const d = snap.data();
+        if (d?.region) setRegionCode(d.region);
+        else if (d?.streamingRegion) setRegionCode(d.streamingRegion);
+        const savedServices: string[] = d?.streamingServices ?? [];
+        setSelected(new Set(savedServices));
+      })
+      .catch(() => {})
+      .finally(() => setInitialising(false));
+  }, [isEdit, user?.uid]);
 
   const region = STREAMING_REGIONS.find((r) => r.code === regionCode)!;
 
@@ -54,19 +74,40 @@ export default function StreamingScreen() {
         region: regionCode,
         streamingServices: Array.from(selected),
       });
-      router.push('/(onboarding)/complete');
+      router.push(isEdit ? '/(tabs)/profile' : '/(onboarding)/complete');
     } finally {
       setSaving(false);
     }
   };
 
+  const handleSkip = () => {
+    router.replace('/(tabs)/profile');
+  };
+
+  const handleClose = () => {
+    router.replace('/(tabs)/profile');
+  };
+
+  if (initialising) {
+    return (
+      <View style={[styles.screen, { backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' }]}>
+        <ActivityIndicator color="#6D28D9" />
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
 
       <View style={[styles.header, { paddingTop: insets.top || 24 }]}>
+        {isEdit && (
+          <TouchableOpacity style={styles.closeBtn} onPress={handleClose} activeOpacity={0.8} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={styles.closeBtnText}>✕</Text>
+          </TouchableOpacity>
+        )}
         <ProgressBar step={3} />
         <View style={{ height: 24 }} />
-        <Text style={styles.step}>step 3 of 4</Text>
+        <Text style={styles.step}>{isEdit ? 'edit profile' : 'step 3 of 4'}</Text>
         <View style={{ height: 6 }} />
         <Text style={styles.heading}>where do you stream?</Text>
         <View style={{ height: 6 }} />
@@ -113,6 +154,11 @@ export default function StreamingScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: (insets.bottom || 0) + 24 }]}>
+        {isEdit && (
+          <TouchableOpacity style={styles.skipLink} onPress={handleSkip} activeOpacity={0.7}>
+            <Text style={styles.skipText}>skip</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
           style={[
             styles.nextBtn,
@@ -125,7 +171,7 @@ export default function StreamingScreen() {
         >
           {saving
             ? <ActivityIndicator color="#FFFFFF" />
-            : <Text style={styles.nextBtnText}>next</Text>}
+            : <Text style={styles.nextBtnText}>{isEdit ? 'save' : 'next'}</Text>}
         </TouchableOpacity>
       </View>
 
@@ -138,6 +184,24 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 28,
     paddingBottom: 8,
+  },
+  closeBtn: {
+    position: 'absolute',
+    top: 16,
+    right: 20,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#6D28D9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  closeBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '400',
+    lineHeight: 16,
   },
   step: {
     fontSize: 11,
@@ -213,6 +277,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
     paddingTop: 16,
     backgroundColor: 'rgba(243,240,255,0.95)',
+    gap: 10,
+  },
+  skipLink: {
+    alignItems: 'center',
+  },
+  skipText: {
+    fontSize: 13,
+    fontWeight: '300',
+    color: '#7C3AED',
+    textDecorationLine: 'underline',
   },
   nextBtn: {
     height: 52,
