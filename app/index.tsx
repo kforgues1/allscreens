@@ -15,7 +15,7 @@ export default function Index() {
       try {
         const snap = await getDoc(doc(db, 'users', user.uid));
         const complete = snap.data()?.onboardingComplete === true;
-        router.replace(complete ? '/(tabs)/browse' : '/(onboarding)/genres');
+        router.replace(complete ? '/(tabs)/decide' : '/(onboarding)/genres');
       } catch {
         router.replace('/(auth)/log-in');
       }

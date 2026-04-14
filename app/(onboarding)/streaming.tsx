@@ -51,7 +51,7 @@ export default function StreamingScreen() {
     setSaving(true);
     try {
       await saveOnboardingData(user.uid, {
-        streamingRegion: regionCode,
+        region: regionCode,
         streamingServices: Array.from(selected),
       });
       router.push('/(onboarding)/complete');
