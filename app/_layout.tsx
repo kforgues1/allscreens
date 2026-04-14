@@ -11,7 +11,7 @@ export default function RootLayout() {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) {
-        router.replace('/(auth)');
+        router.replace('/(auth)/log-in');
         return;
       }
       try {
@@ -19,7 +19,7 @@ export default function RootLayout() {
         const complete = snap.data()?.onboardingComplete === true;
         router.replace(complete ? '/(tabs)/browse' : '/(onboarding)/genres');
       } catch {
-        router.replace('/(auth)');
+        router.replace('/(auth)/log-in');
       }
     });
     return unsub;
