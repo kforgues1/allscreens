@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePathname, router } from 'expo-router';
 import PhoneFrame from '../../components/PhoneFrame';
 
-type TabId = 'explore' | 'browse' | 'profile';
+type TabId = 'explore' | 'decide' | 'profile';
 
 const TAB_BAR_HEIGHT = 72;
 
@@ -26,16 +26,16 @@ function CustomTabBar() {
         <Text style={[styles.tabLabel, active('explore') && styles.tabLabelActive]}>explore</Text>
       </TouchableOpacity>
 
-      {/* Browse — elevated centre */}
+      {/* Decide — elevated centre */}
       <View style={styles.centerWrap}>
         <TouchableOpacity
           style={styles.centerBtn}
-          onPress={() => router.replace('/(tabs)/browse')}
+          onPress={() => router.replace('/(tabs)/decide')}
           activeOpacity={0.85}
         >
           <Text style={styles.centerIcon}>▶</Text>
         </TouchableOpacity>
-        <Text style={[styles.tabLabel, active('browse') && styles.tabLabelActive, { marginTop: 4 }]}>
+        <Text style={[styles.tabLabel, active('decide') && styles.tabLabelActive, { marginTop: 4 }]}>
           browse
         </Text>
       </View>
@@ -61,6 +61,7 @@ export default function TabsLayout() {
         tabBar={() => <CustomTabBar />}
       >
         <Tabs.Screen name="explore" />
+        <Tabs.Screen name="decide" />
         <Tabs.Screen name="browse" />
         <Tabs.Screen name="profile" />
       </Tabs>
