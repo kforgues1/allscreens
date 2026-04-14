@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  StyleSheet, ActivityIndicator, Image, Platform,
+  StyleSheet, ActivityIndicator, Image, Platform, KeyboardAvoidingView,
 } from 'react-native';
 import { router } from 'expo-router';
 import Svg, { Circle, Path, Rect, Line } from 'react-native-svg';
@@ -409,97 +409,118 @@ function LogWatchSheet({ uid, existing, onClose, onSaved }: {
 
   const canSave = !!selected && rating > 0;
 
+  const sheetContent = (
+    <>
+      <View style={styles.sheetHandle} />
+      <Text style={styles.sheetTitle}>log a watch</Text>
+
+      {/* STATE B: search bar shows selected movie + "tap to change" */}
+      {selected ? (
+        <TouchableOpacity
+          style={styles.selectedSearchBar}
+          onPress={() => { setSelected(null); setQuery(''); }}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.selectedSearchBarText} numberOfLines={1}>
+            {selected.title}
+            <Text style={styles.selectedSearchBarHint}> · tap to change</Text>
+          </Text>
+        </TouchableOpacity>
+      ) : (
+        <TextInput
+          style={styles.searchInput}
+          placeholder="search for a movie…"
+          placeholderTextColor="#A78BFA"
+          value={query}
+          onChangeText={v => setQuery(v)}
+          autoFocus={!existing}
+        />
+      )}
+
+      {/* STATE A: search results */}
+      {!selected && results.length > 0 && (
+        <Text style={styles.resultsLabel}>results</Text>
+      )}
+      {!selected && results.map(r => (
+        <TouchableOpacity
+          key={r.id}
+          style={styles.searchResult}
+          onPress={() => { setSelected(r); setResults([]); }}
+        >
+          <Text style={styles.searchResultTitle}>{r.title}</Text>
+          <Text style={styles.searchResultYear}>{r.year}</Text>
+        </TouchableOpacity>
+      ))}
+      {!selected && results.length > 0 && (
+        <Text style={styles.searchHint}>tap a result to select</Text>
+      )}
+
+      {/* STATE B: selected movie details */}
+      {selected && (
+        <>
+          <View style={styles.selectedMovieRow}>
+            <Poster path={selected.posterPath} width={44} height={64} radius={6} />
+            <View style={{ flex: 1, gap: 3 }}>
+              <Text style={styles.selectedTitle}>{selected.title}</Text>
+              <Text style={styles.selectedMeta}>
+                {selected.year}
+                {(selected.genres ?? []).slice(0, 2).map(id => GENRE_LABEL_MAP[id]).filter(Boolean).map(g => ` · ${g}`).join('')}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.ratingRow}>
+            <Text style={styles.ratingLabel}>your rating</Text>
+            <TappableStars rating={rating} onChange={setRating} size={20} />
+          </View>
+
+          <TextInput
+            style={styles.reviewInput}
+            placeholder="add a review (optional)…"
+            placeholderTextColor="#A78BFA"
+            value={reviewText}
+            onChangeText={v => setReviewText(v.slice(0, 280))}
+            multiline
+            maxLength={280}
+          />
+          <Text style={styles.charCount}>{reviewText.length}/280</Text>
+        </>
+      )}
+
+      {/* Save button — always rendered so it stays reachable */}
+      <TouchableOpacity
+        style={[styles.saveBtn, !canSave && styles.saveBtnDisabled, { marginBottom: 16 }]}
+        onPress={handleSave}
+        disabled={!canSave || saving}
+        activeOpacity={0.85}
+      >
+        {saving
+          ? <ActivityIndicator color="#FFF" />
+          : <Text style={styles.saveBtnText}>save to watch history</Text>}
+      </TouchableOpacity>
+    </>
+  );
+
   return (
     <>
       <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose} />
-      <View style={[styles.sheet, Platform.OS === 'web' && ({ maxHeight: '75%', overflowY: 'auto' } as any)]}>
-        <View style={styles.sheetHandle} />
-        <Text style={styles.sheetTitle}>log a watch</Text>
-
-        {/* STATE B: search bar shows selected movie + "tap to change" */}
-        {selected ? (
-          <TouchableOpacity
-            style={styles.selectedSearchBar}
-            onPress={() => { setSelected(null); setQuery(''); }}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.selectedSearchBarText} numberOfLines={1}>
-              {selected.title}
-              <Text style={styles.selectedSearchBarHint}> · tap to change</Text>
-            </Text>
-          </TouchableOpacity>
-        ) : (
-          <TextInput
-            style={styles.searchInput}
-            placeholder="search for a movie…"
-            placeholderTextColor="#A78BFA"
-            value={query}
-            onChangeText={v => setQuery(v)}
-            autoFocus={!existing}
-          />
-        )}
-
-        {/* STATE A: search results */}
-        {!selected && results.length > 0 && (
-          <Text style={styles.resultsLabel}>results</Text>
-        )}
-        {!selected && results.map(r => (
-          <TouchableOpacity
-            key={r.id}
-            style={styles.searchResult}
-            onPress={() => { setSelected(r); setResults([]); }}
-          >
-            <Text style={styles.searchResultTitle}>{r.title}</Text>
-            <Text style={styles.searchResultYear}>{r.year}</Text>
-          </TouchableOpacity>
-        ))}
-        {!selected && results.length > 0 && (
-          <Text style={styles.searchHint}>tap a result to select</Text>
-        )}
-
-        {/* STATE B: selected movie details */}
-        {selected && (
-          <>
-            <View style={styles.selectedMovieRow}>
-              <Poster path={selected.posterPath} width={44} height={64} radius={6} />
-              <View style={{ flex: 1, gap: 3 }}>
-                <Text style={styles.selectedTitle}>{selected.title}</Text>
-                <Text style={styles.selectedMeta}>
-                  {selected.year}
-                  {(selected.genres ?? []).slice(0, 2).map(id => GENRE_LABEL_MAP[id]).filter(Boolean).map(g => ` · ${g}`).join('')}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.ratingRow}>
-              <Text style={styles.ratingLabel}>your rating</Text>
-              <TappableStars rating={rating} onChange={setRating} size={20} />
-            </View>
-
-            <TextInput
-              style={styles.reviewInput}
-              placeholder="add a review (optional)…"
-              placeholderTextColor="#A78BFA"
-              value={reviewText}
-              onChangeText={v => setReviewText(v.slice(0, 280))}
-              multiline
-              maxLength={280}
-            />
-            <Text style={styles.charCount}>{reviewText.length}/280</Text>
-
-            <TouchableOpacity
-              style={[styles.saveBtn, !canSave && styles.saveBtnDisabled]}
-              onPress={handleSave}
-              disabled={!canSave || saving}
-              activeOpacity={0.85}
-            >
-              {saving
-                ? <ActivityIndicator color="#FFF" />
-                : <Text style={styles.saveBtnText}>save to watch history</Text>}
-            </TouchableOpacity>
-          </>
-        )}
-      </View>
+      {Platform.OS === 'web' ? (
+        <View style={[styles.sheet, { maxHeight: '75%', overflowY: 'auto' } as any]}>
+          <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            {sheetContent}
+          </ScrollView>
+        </View>
+      ) : (
+        <KeyboardAvoidingView
+          style={styles.sheet}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={0}
+        >
+          <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            {sheetContent}
+          </ScrollView>
+        </KeyboardAvoidingView>
+      )}
     </>
   );
 }
