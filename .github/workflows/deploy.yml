@@ -1,19 +1,15 @@
 name: Deploy to GitHub Pages
-
 on:
   push:
     branches:
       - main
-
 permissions:
   contents: read
   pages: write
   id-token: write
-
 concurrency:
   group: pages
   cancel-in-progress: false
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -26,11 +22,12 @@ jobs:
         run: npm install
       - name: Build web export
         run: npx expo export -p web
+      - name: Disable Jekyll
+        run: touch dist/.nojekyll
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: dist
-
   deploy:
     environment:
       name: github-pages
