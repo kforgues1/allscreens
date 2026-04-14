@@ -70,7 +70,7 @@ export default function JoinSessionScreen() {
       const userSnap = await getDoc(doc(db, 'users', user.uid));
       const d = userSnap.data();
       const nameFromParts = `${d?.firstName ?? ''} ${d?.lastName ?? ''}`.trim();
-      const displayName = (d?.displayName as string | undefined) ?? nameFromParts || (user.email ?? user.uid);
+      const displayName = ((d?.displayName as string | undefined) ?? nameFromParts) || (user.email ?? user.uid);
 
       await updateDoc(doc(db, 'sessions', code), {
         members: arrayUnion(user.uid),
