@@ -9,7 +9,8 @@ import {
   doc, getDoc, onSnapshot, setDoc, collection,
   query, where, getDocs, limit,
 } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
+import { db, auth } from '../../lib/firebase';
+import { signOut } from 'firebase/auth';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 
@@ -132,6 +133,7 @@ export default function ProfileScreen() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [friends, setFriends] = useState<FriendEntry[]>([]);
   const [addFriendOpen, setAddFriendOpen] = useState(false);
+  const [confirmingSignOut, setConfirmingSignOut] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -260,6 +262,35 @@ export default function ProfileScreen() {
         <Text style={styles.addFriendBtnText}>+ add a friend</Text>
       </TouchableOpacity>
 
+      {/* ── Sign out card ── */}
+      <TouchableOpacity
+        style={styles.signOutCard}
+        onPress={() => setConfirmingSignOut(true)}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.signOutText}>sign out</Text>
+      </TouchableOpacity>
+
+      {confirmingSignOut && (
+        <View style={styles.signOutConfirm}>
+          <Text style={styles.signOutConfirmLabel}>are you sure?</Text>
+          <View style={styles.signOutConfirmActions}>
+            <TouchableOpacity
+              onPress={async () => {
+                await signOut(auth);
+                router.replace('/(auth)');
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.signOutConfirmYes}>yes, sign out</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setConfirmingSignOut(false)} activeOpacity={0.7}>
+              <Text style={styles.signOutConfirmCancel}>cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
       <AddFriendSheet
         visible={addFriendOpen}
         onClose={() => setAddFriendOpen(false)}
@@ -355,4 +386,16 @@ const styles = StyleSheet.create({
   followBtnText: { fontSize: 12, fontWeight: '300', color: '#6D28D9' },
   followBtnTextDone: { color: '#A78BFA' },
   noResults: { fontSize: 12, color: '#A78BFA', textAlign: 'center' },
+
+  signOutCard: {
+    backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#DDD6FE',
+    borderRadius: 12, paddingVertical: 16, alignItems: 'center',
+  },
+  signOutText: { fontSize: 13, fontWeight: '400', color: '#E24B4A' },
+
+  signOutConfirm: { alignItems: 'center', gap: 10 },
+  signOutConfirmLabel: { fontSize: 12, fontWeight: '300', color: '#4C1D95' },
+  signOutConfirmActions: { flexDirection: 'row', gap: 20 },
+  signOutConfirmYes: { fontSize: 13, fontWeight: '400', color: '#E24B4A' },
+  signOutConfirmCancel: { fontSize: 13, fontWeight: '400', color: '#6D28D9' },
 });
