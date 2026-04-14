@@ -84,6 +84,15 @@ export async function getTrending(page: number = 1): Promise<MovieResult[]> {
   return (data.results as any[]).map(mapMovie);
 }
 
+export async function discoverByGenresFiltered(genreIds: number[], page: number = 1): Promise<MovieResult[]> {
+  const genres = genreIds.join('|'); // OR logic — any of the user's genres
+  const url = `${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&with_genres=${genres}&sort_by=vote_average.desc&vote_count.gte=500&language=en-US&page=${page}`;
+  const res = await fetch(url);
+  if (!res.ok) return [];
+  const data = await res.json();
+  return (data.results as any[]).map(mapMovie);
+}
+
 export async function getMovieRecommendations(movieId: number): Promise<MovieResult[]> {
   const url = `${TMDB_BASE_URL}/movie/${movieId}/recommendations?api_key=${TMDB_API_KEY}`;
   const res = await fetch(url);

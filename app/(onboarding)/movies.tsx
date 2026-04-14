@@ -1,24 +1,37 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  FlatList,
-  Image,
-  StyleSheet,
-  Platform,
-  ActivityIndicator,
+  View, Text, TouchableOpacity, FlatList, Image,
+  StyleSheet, Platform, ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '../../context/AuthContext';
 import { saveOnboardingData } from '../../lib/userProfile';
-import { getTopRatedMovies, searchMovies, MovieResult } from '../../lib/tmdb';
+import { getTopRatedMovies, discoverByGenresFiltered, type MovieResult } from '../../lib/tmdb';
 import { TMDB_IMAGE_BASE } from '../../constants/api';
 import { useTheme } from '../../context/ThemeContext';
+import { db } from '../../lib/firebase';
 
 const MAX_SELECTIONS = 5;
+const MAX_PAGE = 10;
+
+const GENRE_IDS: Record<string, number> = {
+  'action': 28, 'adventure': 12, 'animation': 16, 'biography': 99,
+  'comedy': 35, 'crime': 80, 'documentary': 99, 'drama': 18,
+  'fantasy': 14, 'historical': 36, 'horror': 27, 'musical': 10402,
+  'mystery': 9648, 'romance': 10749, 'rom-com': 35, 'sci-fi': 878,
+  'sport': 10770, 'superhero': 28, 'thriller': 53, 'war': 10752,
+  'western': 37, 'family': 10751,
+};
+
+const GENRE_LABEL_MAP: Record<number, string> = {
+  28: 'action', 12: 'adventure', 16: 'animation', 35: 'comedy',
+  80: 'crime', 99: 'documentary', 18: 'drama', 10751: 'family',
+  14: 'fantasy', 36: 'history', 27: 'horror', 10402: 'music',
+  9648: 'mystery', 10749: 'romance', 878: 'sci-fi', 53: 'thriller',
+  10752: 'war', 37: 'western', 10770: 'tv movie',
+};
 
 const gradientBtnStyle =
   Platform.OS === 'web'
@@ -30,49 +43,76 @@ export default function MoviesScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
 
-  const [query, setQuery] = useState('');
   const [results, setResults] = useState<MovieResult[]>([]);
   const [selected, setSelected] = useState<MovieResult[]>([]);
-  const [fetching, setFetching] = useState(false);
+  const [page, setPage] = useState(1);
+  const [loadingInitial, setLoadingInitial] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [saving, setSaving] = useState(false);
+  // Store resolved genre IDs so loadMore can reuse them without re-reading Firestore
+  const genreIdsRef = useRef<number[]>([]);
 
-  // Load top-rated on mount
+  // On mount: read user's saved genres from Firestore, fetch page 1
   useEffect(() => {
-    setFetching(true);
-    getTopRatedMovies()
-      .then(setResults)
-      .catch(() => {})
-      .finally(() => setFetching(false));
-  }, []);
+    if (!user) return;
+    let cancelled = false;
+    (async () => {
+      setLoadingInitial(true);
+      try {
+        const snap = await getDoc(doc(db, 'users', user.uid));
+        const savedGenres: string[] = (snap.data()?.genres ?? []) as string[];
+        const ids = savedGenres
+          .map(g => GENRE_IDS[g.toLowerCase()])
+          .filter((id): id is number => id !== undefined);
+        genreIdsRef.current = ids;
 
-  const runSearch = useCallback(async (q: string) => {
-    if (!q.trim()) {
-      setFetching(true);
-      getTopRatedMovies()
-        .then(setResults)
-        .catch(() => {})
-        .finally(() => setFetching(false));
-      return;
-    }
-    setFetching(true);
-    searchMovies(q)
-      .then(setResults)
-      .catch(() => {})
-      .finally(() => setFetching(false));
-  }, []);
+        const firstPage = ids.length > 0
+          ? await discoverByGenresFiltered(ids, 1)
+          : await getTopRatedMovies(1);
 
-  const handleQueryChange = (v: string) => {
-    setQuery(v);
-    if (v.length === 0 || v.length > 2) runSearch(v);
-  };
+        if (!cancelled) {
+          setResults(firstPage);
+          setPage(1);
+          setHasMore(firstPage.length >= 20);
+        }
+      } catch {
+        if (!cancelled) setResults([]);
+      } finally {
+        if (!cancelled) setLoadingInitial(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user?.uid]);
 
-  const isSelected = (id: number) => selected.some((m) => m.id === id);
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore || loadingInitial) return;
+    const nextPage = page + 1;
+    if (nextPage > MAX_PAGE) { setHasMore(false); return; }
+
+    setLoadingMore(true);
+    try {
+      const more = genreIdsRef.current.length > 0
+        ? await discoverByGenresFiltered(genreIdsRef.current, nextPage)
+        : await getTopRatedMovies(nextPage);
+
+      setResults(prev => {
+        const existingIds = new Set(prev.map(m => m.id));
+        return [...prev, ...more.filter(m => !existingIds.has(m.id))];
+      });
+      setPage(nextPage);
+      if (more.length < 20 || nextPage >= MAX_PAGE) setHasMore(false);
+    } catch { /* silent — keep existing results */ }
+    finally { setLoadingMore(false); }
+  }, [loadingMore, hasMore, loadingInitial, page]);
+
+  const isSelected = (id: number) => selected.some(m => m.id === id);
 
   const toggle = (movie: MovieResult) => {
     if (isSelected(movie.id)) {
-      setSelected((prev) => prev.filter((m) => m.id !== movie.id));
+      setSelected(prev => prev.filter(m => m.id !== movie.id));
     } else if (selected.length < MAX_SELECTIONS) {
-      setSelected((prev) => [...prev, movie]);
+      setSelected(prev => [...prev, movie]);
     }
   };
 
@@ -81,7 +121,8 @@ export default function MoviesScreen() {
     setSaving(true);
     try {
       await saveOnboardingData(user.uid, {
-        favouriteMovies: selected.map((m) => ({ id: m.id, title: m.title })),
+        favouriteMovies: selected.map(m => ({ id: m.id, title: m.title })),
+        favouriteMovieIds: selected.map(m => m.id),
       });
       router.push('/(onboarding)/streaming');
     } finally {
@@ -92,9 +133,11 @@ export default function MoviesScreen() {
   const renderItem = ({ item }: { item: MovieResult }) => {
     const active = isSelected(item.id);
     const atMax = selected.length >= MAX_SELECTIONS;
+    const genreLabel = GENRE_LABEL_MAP[item.genres[0]] ?? '';
+
     return (
       <TouchableOpacity
-        style={[styles.card, active && styles.cardActive, atMax && !active && styles.cardDisabled]}
+        style={[styles.row, active && styles.rowActive, atMax && !active && styles.rowDisabled]}
         activeOpacity={0.75}
         onPress={() => toggle(item)}
         disabled={atMax && !active}
@@ -103,21 +146,20 @@ export default function MoviesScreen() {
           <Image
             source={{ uri: `${TMDB_IMAGE_BASE}${item.posterPath}` }}
             style={styles.poster}
+            resizeMode="cover"
           />
         ) : (
           <View style={[styles.poster, styles.posterPlaceholder]} />
         )}
-        <View style={styles.cardInfo}>
-          <Text style={[styles.cardTitle, active && styles.cardTitleActive]} numberOfLines={2}>
-            {item.title}
+        <View style={styles.info}>
+          <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
+          <Text style={styles.meta}>
+            {item.year}{genreLabel ? ` · ${genreLabel}` : ''}
           </Text>
-          {!!item.year && (
-            <Text style={[styles.cardYear, active && styles.cardYearActive]}>{item.year}</Text>
-          )}
         </View>
         {active && (
           <View style={styles.checkBadge}>
-            <Text style={styles.checkBadgeText}>✓</Text>
+            <Text style={styles.checkText}>✓</Text>
           </View>
         )}
       </TouchableOpacity>
@@ -133,7 +175,7 @@ export default function MoviesScreen() {
             <Text style={styles.backArrow}>←</Text>
           </TouchableOpacity>
           <View style={styles.segmentBarRow}>
-            {[1,2,3,4].map(i => (
+            {[1, 2, 3, 4].map(i => (
               <View key={i} style={[styles.segmentBar, i <= 2 ? styles.segmentBarFilled : styles.segmentBarEmpty]} />
             ))}
           </View>
@@ -146,43 +188,32 @@ export default function MoviesScreen() {
           pick up to {MAX_SELECTIONS}
           {selected.length > 0 ? ` · ${selected.length} selected` : ''}
         </Text>
-        <View style={{ height: 14 }} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="search movies…"
-          placeholderTextColor="#A78BFA"
-          value={query}
-          onChangeText={handleQueryChange}
-          autoCapitalize="none"
-          returnKeyType="search"
-          onSubmitEditing={() => runSearch(query)}
-        />
       </View>
 
-      {fetching && results.length === 0 ? (
+      {loadingInitial ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator color="#7C3AED" />
         </View>
       ) : (
         <FlatList
           data={results}
-          keyExtractor={(item) => String(item.id)}
+          keyExtractor={item => String(item.id)}
           renderItem={renderItem}
-          numColumns={2}
-          columnWrapperStyle={styles.row}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
-          ListFooterComponent={<View style={{ height: 120 }} />}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.2}
+          ListFooterComponent={
+            loadingMore
+              ? <View style={styles.footerSpinner}><ActivityIndicator color="#A78BFA" size="small" /></View>
+              : <View style={{ height: 120 }} />
+          }
         />
       )}
 
       <View style={[styles.footer, { paddingBottom: (insets.bottom || 0) + 24 }]}>
         <TouchableOpacity
-          style={[
-            styles.nextBtn,
-            gradientBtnStyle,
-            selected.length === 0 && styles.nextBtnDisabled,
-          ]}
+          style={[styles.nextBtn, gradientBtnStyle, selected.length === 0 && styles.nextBtnDisabled]}
           activeOpacity={0.85}
           onPress={handleNext}
           disabled={saving || selected.length === 0}
@@ -196,9 +227,6 @@ export default function MoviesScreen() {
     </View>
   );
 }
-
-const CARD_GAP = 12;
-const CARD_H_PAD = 24;
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
@@ -248,80 +276,42 @@ const styles = StyleSheet.create({
     color: '#7C3AED',
     letterSpacing: 0.5,
   },
-  searchInput: {
-    height: 44,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#DDD6FE',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    fontSize: 14,
-    fontWeight: '300',
-    color: '#4C1D95',
-  },
   loadingWrap: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
   list: {
-    paddingHorizontal: CARD_H_PAD,
+    paddingHorizontal: 20,
     paddingTop: 12,
   },
   row: {
-    justifyContent: 'space-between',
-    marginBottom: CARD_GAP,
-  },
-  card: {
-    flex: 1,
-    maxWidth: '48%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
     backgroundColor: '#FFFFFF',
-    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#DDD6FE',
-    overflow: 'hidden',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 8,
   },
-  cardActive: {
+  rowActive: {
     borderColor: '#7C3AED',
-    borderWidth: 2,
+    borderWidth: 1.5,
   },
-  cardDisabled: {
-    opacity: 0.4,
-  },
+  rowDisabled: { opacity: 0.4 },
   poster: {
-    width: '100%',
-    aspectRatio: 2 / 3,
+    width: 36,
+    height: 52,
+    borderRadius: 4,
     backgroundColor: '#EDE9FE',
   },
-  posterPlaceholder: {
-    backgroundColor: '#DDD6FE',
-  },
-  cardInfo: {
-    padding: 8,
-  },
-  cardTitle: {
-    fontSize: 12,
-    fontWeight: '300',
-    color: '#4C1D95',
-    lineHeight: 16,
-  },
-  cardTitleActive: {
-    fontWeight: '400',
-    color: '#4C1D95',
-  },
-  cardYear: {
-    fontSize: 11,
-    fontWeight: '300',
-    color: '#A78BFA',
-    marginTop: 2,
-  },
-  cardYearActive: {
-    color: '#7C3AED',
-  },
+  posterPlaceholder: { backgroundColor: '#DDD6FE' },
+  info: { flex: 1, gap: 3 },
+  title: { fontSize: 13, fontWeight: '400', color: '#4C1D95' },
+  meta: { fontSize: 11, fontWeight: '300', color: '#A78BFA' },
   checkBadge: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
     width: 22,
     height: 22,
     borderRadius: 11,
@@ -329,11 +319,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  checkBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
-  },
+  checkText: { color: '#FFFFFF', fontSize: 12, fontWeight: '600' },
+  footerSpinner: { paddingVertical: 16, alignItems: 'center' },
   footer: {
     position: 'absolute',
     bottom: 0,
@@ -349,9 +336,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  nextBtnDisabled: {
-    opacity: 0.45,
-  },
+  nextBtnDisabled: { opacity: 0.45 },
   nextBtnText: {
     color: '#FFFFFF',
     fontSize: 15,
