@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocalSearchParams } from 'expo-router';
+import Svg, { Circle, Path, Rect, Line } from 'react-native-svg';
 import {
   View, Text, TouchableOpacity, StyleSheet, Platform,
   Image, Animated, PanResponder, ActivityIndicator,
@@ -81,6 +82,35 @@ function MoviePoster({ posterPath, width, height }: { posterPath: string | null;
   return <View style={[styles.posterPlaceholder, { width, height }]} />;
 }
 
+// ─── Mode Selector Icons ──────────────────────────────────────────────────────
+
+function SoloModeIcon() {
+  return (
+    <Svg width={36} height={36} viewBox="0 0 36 36" fill="none">
+      <Circle cx={18} cy={13} r={5} stroke="#6D28D9" strokeWidth={1.5} />
+      <Path d="M7 32 C7 24 11 20 18 20 C25 20 29 24 29 32" stroke="#6D28D9" strokeWidth={1.5} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+function GroupModeIcon() {
+  return (
+    <Svg width={44} height={36} viewBox="0 0 44 36" fill="none">
+      {/* Left phone */}
+      <Rect x={2} y={6} width={12} height={20} rx={2.5} stroke="#6D28D9" strokeWidth={1.5} />
+      <Line x1={4} y1={23} x2={12} y2={23} stroke="#6D28D9" strokeWidth={1} strokeLinecap="round" />
+      {/* Right phone — slightly offset */}
+      <Rect x={30} y={10} width={12} height={18} rx={2.5} stroke="#7C3AED" strokeWidth={1.5} />
+      <Line x1={32} y1={25} x2={40} y2={25} stroke="#7C3AED" strokeWidth={1} strokeLinecap="round" />
+      {/* Connection lines */}
+      <Line x1={14} y1={16} x2={19} y2={18} stroke="#6D28D9" strokeWidth={1.2} strokeLinecap="round" />
+      <Line x1={25} y1={18} x2={30} y2={16} stroke="#7C3AED" strokeWidth={1.2} strokeLinecap="round" />
+      {/* Centre dot */}
+      <Circle cx={22} cy={18} r={2.5} fill="#7C3AED" />
+    </Svg>
+  );
+}
+
 // ─── Mode Selector ────────────────────────────────────────────────────────────
 
 function ModeSelector({ onSolo, onGroup }: { onSolo: () => void; onGroup: () => void }) {
@@ -89,17 +119,21 @@ function ModeSelector({ onSolo, onGroup }: { onSolo: () => void; onGroup: () => 
       <Text style={styles.selectorTitle}>decide</Text>
       <Text style={styles.selectorSub}>what are you watching tonight?</Text>
       <View style={styles.modeRow}>
-        {/* Solo card */}
+        {/* Just me card */}
         <TouchableOpacity style={styles.modeCard} onPress={onSolo} activeOpacity={0.85}>
-          <Text style={styles.modeIcon}>👤</Text>
-          <Text style={styles.modeLabel}>solo</Text>
-          <Text style={styles.modeSub}>5–8 picks then choose</Text>
+          <View style={styles.modeIconWrap}>
+            <SoloModeIcon />
+          </View>
+          <Text style={styles.modeLabel}>just me</Text>
+          <Text style={styles.modeSub}>solo · pick from your streaming</Text>
         </TouchableOpacity>
-        {/* Group card */}
-        <TouchableOpacity style={styles.modeCard} onPress={onGroup} activeOpacity={0.85}>
-          <Text style={styles.modeIcon}>👥</Text>
-          <Text style={styles.modeLabel}>group</Text>
-          <Text style={styles.modeSub}>up to 4 people</Text>
+        {/* With friends card */}
+        <TouchableOpacity style={[styles.modeCard, styles.modeCardGroup]} onPress={onGroup} activeOpacity={0.85}>
+          <View style={styles.modeIconWrap}>
+            <GroupModeIcon />
+          </View>
+          <Text style={styles.modeLabel}>with friends</Text>
+          <Text style={styles.modeSub}>up to 4 · shared queue</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -719,10 +753,17 @@ const styles = StyleSheet.create({
   modeRow: { flexDirection: 'row', gap: 12 },
   modeCard: {
     flex: 1, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#DDD6FE',
-    borderRadius: 12, padding: 20, alignItems: 'center', gap: 6,
+    borderRadius: 12, padding: 20, alignItems: 'center', gap: 8,
   },
-  modeIcon: { fontSize: 24 },
-  modeLabel: { fontSize: 13, fontWeight: '400', color: '#4C1D95' },
+  modeCardGroup: {
+    borderWidth: 1.5, borderColor: '#6D28D9',
+  },
+  modeIconWrap: {
+    width: 64, height: 64, borderRadius: 16,
+    backgroundColor: '#EDE9FE',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  modeLabel: { fontSize: 13, fontWeight: '500', color: '#4C1D95' },
   modeSub: { fontSize: 10, color: '#A78BFA', textAlign: 'center' },
 
   // Swipe
