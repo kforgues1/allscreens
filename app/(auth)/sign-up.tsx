@@ -195,7 +195,7 @@ export default function SignUpScreen() {
         {/* "already have an account?" inline link */}
         <View style={styles.loginRow}>
           <Text style={styles.loginPrompt}>already have an account? </Text>
-          <TouchableOpacity onPress={() => router.replace('/(auth)')}>
+          <TouchableOpacity onPress={() => router.replace('/(auth)/log-in')}>
 
             <Text style={styles.loginLink}>log in</Text>
           </TouchableOpacity>
