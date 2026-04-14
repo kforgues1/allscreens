@@ -29,6 +29,8 @@ interface SessionMember { uid: string; name: string; initials: string; }
 interface Session {
   code: string;
   hostUid: string;
+  hostName?: string;
+  memberNames?: Record<string, string>;
   members: string[];
   memberProfiles: SessionMember[];
   status: 'waiting' | 'swiping' | 'done';
