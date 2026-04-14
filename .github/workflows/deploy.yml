@@ -22,6 +22,8 @@ jobs:
         run: npm install
       - name: Build web export
         run: npx expo export -p web
+      - name: Fix asset paths for GitHub Pages subdirectory
+        run: sed -i 's|"/_expo/|"/allscreens/_expo/|g; s|href="/favicon.ico"|href="/allscreens/favicon.ico"|g' dist/index.html
       - name: Disable Jekyll
         run: touch dist/.nojekyll
       - name: Upload artifact
