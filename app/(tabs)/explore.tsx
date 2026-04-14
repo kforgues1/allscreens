@@ -35,6 +35,7 @@ interface DiscoverMovie {
 interface DiscoverShelf {
   id: string;
   label: string;
+  sourceName?: string; // for "because you liked [sourceName]" — rendered in weight 500
   movies: DiscoverMovie[];
   highlight?: boolean;
 }
@@ -649,7 +650,8 @@ function DiscoverTab({ uid, onMovieTap }: {
           if (recs.length > 0) {
             result.push({
               id: `rec-${src.id}`,
-              label: `because you liked ${src.title.toLowerCase()}`,
+              label: 'because you liked',
+              sourceName: src.title.toLowerCase(),
               movies: recs.slice(0, 3).map(toMovie),
               highlight: true,
             });
@@ -675,7 +677,12 @@ function DiscoverTab({ uid, onMovieTap }: {
     <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
       {shelves.map(shelf => (
         <View key={shelf.id} style={styles.shelf}>
-          <Text style={styles.shelfLabel}>{shelf.label}</Text>
+          <Text style={styles.shelfLabel}>
+            {shelf.label}
+            {shelf.sourceName ? (
+              <Text style={styles.shelfLabelSource}> {shelf.sourceName}</Text>
+            ) : null}
+          </Text>
           {shelf.movies.map(m => (
             <TouchableOpacity
               key={m.id}
@@ -1042,8 +1049,11 @@ const styles = StyleSheet.create({
   // ── Shelf (Discover) ───────────────────────────────────────────────────────
   shelf: { gap: 8 },
   shelfLabel: {
-    fontSize: 9, fontWeight: '400', color: '#A78BFA',
-    letterSpacing: 1.5, textTransform: 'uppercase',
+    fontSize: 12, fontWeight: '400', color: '#4C1D95',
+    marginBottom: 8,
+  },
+  shelfLabelSource: {
+    fontWeight: '500',
   },
   movieCard: {
     flexDirection: 'row', gap: 10, alignItems: 'center',
@@ -1051,8 +1061,8 @@ const styles = StyleSheet.create({
     borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8,
   },
   movieCardHighlight: { borderColor: '#6D28D9' },
-  movieCardTitle: { fontSize: 12, fontWeight: '500', color: '#4C1D95' },
-  movieCardMeta: { fontSize: 10, color: '#A78BFA' },
+  movieCardTitle: { fontSize: 13, fontWeight: '500', color: '#4C1D95' },
+  movieCardMeta: { fontSize: 11, fontWeight: '300', color: '#A78BFA' },
   serviceBadge: {
     alignSelf: 'flex-start', backgroundColor: '#EDE9FE',
     borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2,
