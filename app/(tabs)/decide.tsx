@@ -95,18 +95,16 @@ function SoloModeIcon() {
 
 function GroupModeIcon() {
   return (
-    <Svg width={44} height={36} viewBox="0 0 44 36" fill="none">
-      {/* Left phone */}
-      <Rect x={2} y={6} width={12} height={20} rx={2.5} stroke="#6D28D9" strokeWidth={1.5} />
-      <Line x1={4} y1={23} x2={12} y2={23} stroke="#6D28D9" strokeWidth={1} strokeLinecap="round" />
-      {/* Right phone — slightly offset */}
-      <Rect x={30} y={10} width={12} height={18} rx={2.5} stroke="#7C3AED" strokeWidth={1.5} />
-      <Line x1={32} y1={25} x2={40} y2={25} stroke="#7C3AED" strokeWidth={1} strokeLinecap="round" />
-      {/* Connection lines */}
-      <Line x1={14} y1={16} x2={19} y2={18} stroke="#6D28D9" strokeWidth={1.2} strokeLinecap="round" />
-      <Line x1={25} y1={18} x2={30} y2={16} stroke="#7C3AED" strokeWidth={1.2} strokeLinecap="round" />
+    <Svg width={36} height={24} viewBox="0 0 36 24" fill="none">
+      {/* Left phone: 10×18 at (1, 3) */}
+      <Rect x={1} y={3} width={10} height={18} rx={2} stroke="#6D28D9" strokeWidth={1.5} />
+      {/* Right phone: 9×16 at (25, 5) — 6px right, 2px lower */}
+      <Rect x={25} y={5} width={9} height={16} rx={2} stroke="#7C3AED" strokeWidth={1.5} />
       {/* Centre dot */}
-      <Circle cx={22} cy={18} r={2.5} fill="#7C3AED" />
+      <Circle cx={18} cy={12} r={3} fill="#6D28D9" />
+      {/* Lines from dot to each phone */}
+      <Line x1={11} y1={12} x2={15} y2={12} stroke="#6D28D9" strokeWidth={1} strokeLinecap="round" />
+      <Line x1={21} y1={12} x2={25} y2={12} stroke="#6D28D9" strokeWidth={1} strokeLinecap="round" />
     </Svg>
   );
 }
@@ -125,10 +123,10 @@ function ModeSelector({ onSolo, onGroup }: { onSolo: () => void; onGroup: () => 
             <SoloModeIcon />
           </View>
           <Text style={styles.modeLabel}>just me</Text>
-          <Text style={styles.modeSub}>solo · pick from your streaming</Text>
+          <Text style={styles.modeSub}>from your streaming services</Text>
         </TouchableOpacity>
         {/* With friends card */}
-        <TouchableOpacity style={[styles.modeCard, styles.modeCardGroup]} onPress={onGroup} activeOpacity={0.85}>
+        <TouchableOpacity style={styles.modeCard} onPress={onGroup} activeOpacity={0.85}>
           <View style={styles.modeIconWrap}>
             <GroupModeIcon />
           </View>
@@ -752,11 +750,8 @@ const styles = StyleSheet.create({
   },
   modeRow: { flexDirection: 'row', gap: 12 },
   modeCard: {
-    flex: 1, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#DDD6FE',
+    flex: 1, backgroundColor: '#FFFFFF', borderWidth: 0.5, borderColor: '#DDD6FE',
     borderRadius: 12, padding: 20, alignItems: 'center', gap: 8,
-  },
-  modeCardGroup: {
-    borderWidth: 1.5, borderColor: '#6D28D9',
   },
   modeIconWrap: {
     width: 64, height: 64, borderRadius: 16,
