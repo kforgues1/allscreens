@@ -377,7 +377,8 @@ function GroupWaiting({
           try {
             const u = await getDoc(doc(db, 'users', mUid));
             const d = u.data();
-            const name = d?.displayName ?? `${d?.firstName ?? ''} ${d?.lastName ?? ''}`.trim() || mUid;
+            const nameParts = `${d?.firstName ?? ''} ${d?.lastName ?? ''}`.trim();
+            const name = ((d?.displayName as string | undefined) ?? nameParts) || mUid;
             return { uid: mUid, name, initials: initials(name) };
           } catch {
             return { uid: mUid, name: mUid, initials: '?' };
