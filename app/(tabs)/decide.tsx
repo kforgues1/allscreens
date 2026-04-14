@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useLocalSearchParams } from 'expo-router';
 import {
   View, Text, TouchableOpacity, StyleSheet, Platform,
   Image, Animated, PanResponder, ActivityIndicator,
@@ -93,7 +94,7 @@ function ModeSelector({ onSolo, onGroup }: { onSolo: () => void; onGroup: () => 
           <Text style={styles.modeSub}>5–8 picks then choose</Text>
         </TouchableOpacity>
         {/* Group card */}
-        <TouchableOpacity style={[styles.modeCard, styles.modeCardGroup]} onPress={onGroup} activeOpacity={0.85}>
+        <TouchableOpacity style={styles.modeCard} onPress={onGroup} activeOpacity={0.85}>
           <Text style={styles.modeIcon}>👥</Text>
           <Text style={styles.modeLabel}>group</Text>
           <Text style={styles.modeSub}>up to 4 people</Text>
@@ -334,24 +335,37 @@ function BracketScreen({ initial, onWinner }: { initial: Movie[]; onWinner: (m: 
 // ─── Group Waiting Room ───────────────────────────────────────────────────────
 
 function GroupWaiting({
-  uid, displayName, onStart, onBack,
-}: { uid: string; displayName: string; onStart: (session: Session) => void; onBack: () => void }) {
+  uid, displayName, onStart, onBack, initialCode,
+}: { uid: string; displayName: string; onStart: (session: Session) => void; onBack: () => void; initialCode?: string }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    const code = randomCode();
-    const newSession: Session = {
-      code,
-      hostUid: uid,
-      members: [uid],
-      memberProfiles: [{ uid, name: displayName, initials: initials(displayName) }],
-      status: 'waiting',
-      movies: [],
-    };
-    setDoc(doc(db, 'sessions', code), newSession).then(() => {
-      setLoading(false);
-    });
+    let code: string;
+
+    if (initialCode) {
+      // Joining an existing session — just listen to it
+      code = initialCode;
+      updateDoc(doc(db, 'sessions', code), {
+        members: arrayUnion(uid),
+        [`memberNames.${uid}`]: displayName,
+      }).catch(() => {}).finally(() => setLoading(false));
+    } else {
+      // Creating a new session
+      code = randomCode();
+      const newSession: Session = {
+        code,
+        hostUid: uid,
+        hostName: displayName,
+        members: [uid],
+        memberProfiles: [{ uid, name: displayName, initials: initials(displayName) }],
+        memberNames: { [uid]: displayName },
+        status: 'waiting',
+        movies: [],
+      };
+      setDoc(doc(db, 'sessions', code), newSession).then(() => setLoading(false));
+    }
 
     const unsub = onSnapshot(doc(db, 'sessions', code), async snap => {
       const data = snap.data() as Session | undefined;
@@ -363,7 +377,7 @@ function GroupWaiting({
           try {
             const u = await getDoc(doc(db, 'users', mUid));
             const d = u.data();
-            const name = `${d?.firstName ?? ''} ${d?.lastName ?? ''}`.trim() || mUid;
+            const name = d?.displayName ?? `${d?.firstName ?? ''} ${d?.lastName ?? ''}`.trim() || mUid;
             return { uid: mUid, name, initials: initials(name) };
           } catch {
             return { uid: mUid, name: mUid, initials: '?' };
@@ -373,21 +387,23 @@ function GroupWaiting({
       setSession({ ...data, memberProfiles: profiles });
     });
     return unsub;
-  }, [uid, displayName]);
+  }, [uid, displayName, initialCode]);
 
   if (loading || !session) {
     return <View style={styles.centered}><ActivityIndicator color="#6D28D9" /></View>;
   }
 
-  const inviteUrl = `allscreens.app/join/${session.code}`;
+  const inviteUrl = `https://allscreens.app/join/${session.code}`;
   const canStart = session.members.length >= 2;
 
-  const handleCopy = async () => {
+  const handleCopy = () => {
     copyToClipboard(inviteUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const handleShare = () => {
-    Share.share({ message: `join my allscreens session: ${inviteUrl}` });
+    Share.share({ message: `join my allscreens session — let's pick something to watch together: ${inviteUrl}` });
   };
 
   return (
@@ -417,7 +433,7 @@ function GroupWaiting({
       {/* Invite link */}
       <TouchableOpacity style={styles.invitePill} onPress={handleCopy} activeOpacity={0.8}>
         <Text style={styles.inviteText}>{inviteUrl}</Text>
-        <Text style={styles.copyLabel}>tap to copy</Text>
+        <Text style={styles.copyLabel}>{copied ? 'copied!' : 'tap to copy'}</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.secondaryBtn} onPress={handleShare} activeOpacity={0.85}>
@@ -572,8 +588,9 @@ export default function DecideScreen() {
   const { colors } = useTheme();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const { joinCode } = useLocalSearchParams<{ joinCode?: string }>();
 
-  const [mode, setMode] = useState<AppMode>('selector');
+  const [mode, setMode] = useState<AppMode>(() => joinCode ? 'group-waiting' : 'selector');
   const [picks, setPicks] = useState<Movie[]>([]);
   const [winner, setWinner] = useState<Movie | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -635,6 +652,7 @@ export default function DecideScreen() {
           displayName={displayName}
           onStart={s => { setSession(s); setMode('group-swipe'); }}
           onBack={() => setMode('selector')}
+          initialCode={joinCode ?? undefined}
         />
       )}
 
@@ -700,7 +718,6 @@ const styles = StyleSheet.create({
     flex: 1, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#DDD6FE',
     borderRadius: 12, padding: 20, alignItems: 'center', gap: 6,
   },
-  modeCardGroup: { borderColor: '#6D28D9' },
   modeIcon: { fontSize: 24 },
   modeLabel: { fontSize: 13, fontWeight: '400', color: '#4C1D95' },
   modeSub: { fontSize: 10, color: '#A78BFA', textAlign: 'center' },

@@ -8,7 +8,7 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import PhoneFrame from '../../components/PhoneFrame';
@@ -54,6 +54,7 @@ const gradientBtnStyle =
 export default function LogInScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const { sessionCode } = useLocalSearchParams<{ sessionCode?: string }>();
 
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
@@ -69,9 +70,13 @@ export default function LogInScreen() {
     setLoading(true);
     try {
       const { user } = await signInWithEmailAndPassword(auth, email.trim(), password);
+      if (sessionCode) {
+        router.replace({ pathname: '/join/[code]', params: { code: sessionCode } });
+        return;
+      }
       const snap = await getDoc(doc(db, 'users', user.uid));
       const done = snap.data()?.onboardingComplete ?? false;
-      router.replace(done ? '/(tabs)/browse' : '/(onboarding)/genres');
+      router.replace(done ? '/(tabs)/decide' : '/(onboarding)/genres');
     } catch (e: any) {
       setError(mapFirebaseError(e.code));
     } finally {

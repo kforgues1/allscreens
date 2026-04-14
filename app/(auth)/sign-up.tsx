@@ -9,7 +9,7 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import PhoneFrame from '../../components/PhoneFrame';
@@ -52,6 +52,7 @@ const gradientBtnStyle =
 export default function SignUpScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const { sessionCode } = useLocalSearchParams<{ sessionCode?: string }>();
 
   const [firstName, setFirstName]           = useState('');
   const [lastName, setLastName]             = useState('');
@@ -77,14 +78,20 @@ export default function SignUpScreen() {
     setLoading(true);
     try {
       const { user } = await createUserWithEmailAndPassword(auth, email.trim(), password);
+      const displayName = `${firstName} ${lastName}`.trim();
       await setDoc(doc(db, 'users', user.uid), {
         firstName,
         lastName,
+        displayName,
         email: email.trim(),
         createdAt: serverTimestamp(),
         onboardingComplete: false,
       });
-      router.replace('/(auth)/welcome');
+      if (sessionCode) {
+        router.replace({ pathname: '/join/[code]', params: { code: sessionCode } });
+      } else {
+        router.replace('/(auth)/welcome');
+      }
     } catch (e: any) {
       setError(mapFirebaseError(e.code));
     } finally {

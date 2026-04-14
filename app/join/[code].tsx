@@ -1,12 +1,26 @@
 import { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Platform } from 'react-native';
+import {
+  View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Platform,
+} from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useAuth } from '../../context/AuthContext';
+import PhoneFrame from '../../components/PhoneFrame';
 
-const gradientStyle =
+const wordmarkStyle =
+  Platform.OS === 'web'
+    ? ({
+        background:
+          'linear-gradient(135deg, #1E0A4E 0%, #4C1D95 25%, #7C3AED 50%, #A78BFA 75%, #C4B5FD 100%)',
+        WebkitBackgroundClip: 'text',
+        WebkitTextFillColor: 'transparent',
+        backgroundClip: 'text',
+      } as any)
+    : { color: '#6D28D9' };
+
+const gradientBtnStyle =
   Platform.OS === 'web'
     ? ({ background: 'linear-gradient(135deg, #4C1D95, #7C3AED)' } as any)
     : { backgroundColor: '#6D28D9' };
@@ -15,12 +29,25 @@ export default function JoinSessionScreen() {
   const { code } = useLocalSearchParams<{ code: string }>();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
-  const [joining, setJoining] = useState(false);
-  const [error, setError] = useState('');
 
+  const [hostName, setHostName] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  const [joining, setJoining] = useState(false);
+
+  // Fetch host name for the unauthenticated invite preview
+  useEffect(() => {
+    if (!code) return;
+    getDoc(doc(db, 'sessions', code))
+      .then(snap => {
+        const name = snap.data()?.hostName as string | undefined;
+        if (name) setHostName(name);
+      })
+      .catch(() => {});
+  }, [code]);
+
+  // Logged-in: validate session and join immediately
   useEffect(() => {
     if (!user || !code) return;
-    // Logged-in user lands here — immediately join and navigate to decide screen
     joinAndNavigate();
   }, [user, code]);
 
@@ -28,59 +55,111 @@ export default function JoinSessionScreen() {
     if (!user || !code) return;
     setJoining(true);
     try {
+      const snap = await getDoc(doc(db, 'sessions', code));
+      if (!snap.exists() || snap.data()?.status === 'ended') {
+        setError('this session has ended or doesn\'t exist');
+        setJoining(false);
+        return;
+      }
+      const members: string[] = snap.data()?.members ?? [];
+      if (members.length >= 4 && !members.includes(user.uid)) {
+        setError('this session is full');
+        setJoining(false);
+        return;
+      }
+      const userSnap = await getDoc(doc(db, 'users', user.uid));
+      const d = userSnap.data();
+      const nameFromParts = `${d?.firstName ?? ''} ${d?.lastName ?? ''}`.trim();
+      const displayName = (d?.displayName as string | undefined) ?? nameFromParts || (user.email ?? user.uid);
+
       await updateDoc(doc(db, 'sessions', code), {
         members: arrayUnion(user.uid),
+        [`memberNames.${user.uid}`]: displayName,
       });
-      // Navigate to decide screen where they'll be in the group-waiting room
-      // Pass the code so decide screen can pick it up
-      router.replace('/(tabs)/decide');
-    } catch (e: any) {
-      setError('session not found or already started');
-    } finally {
+      router.replace({ pathname: '/(tabs)/decide', params: { joinCode: code } });
+    } catch {
+      setError('could not join session — try again');
       setJoining(false);
     }
   };
 
-  // Not logged in — show invite prompt
+  // ── State A: not logged in ────────────────────────────────────────────────
+
   if (!user) {
     return (
-      <View style={[styles.screen, { paddingTop: insets.top + 24 }]}>
-        <Text style={styles.wordmark}>allscreens</Text>
-        <View style={styles.body}>
-          <Text style={styles.inviteText}>you've been invited to a watch session</Text>
-          <Text style={styles.sessionCode}>{code}</Text>
-          <TouchableOpacity
-            style={[styles.primaryBtn, gradientStyle]}
-            onPress={() => router.replace('/(auth)/log-in')}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.primaryBtnText}>join with your account</Text>
-          </TouchableOpacity>
-          <Text style={styles.finePrint}>
-            you'll be taken back here after signing in
-          </Text>
+      <PhoneFrame>
+        <View style={[styles.screen, { paddingTop: (insets.top || 0) + 32, paddingBottom: (insets.bottom || 0) + 32 }]}>
+          <Text style={[styles.wordmark, wordmarkStyle]}>allscreens</Text>
+          <View style={{ height: 8 }} />
+          <Text style={styles.invitedLabel}>you've been invited</Text>
+          {hostName ? (
+            <Text style={styles.byLabel}>by {hostName}</Text>
+          ) : null}
+
+          {/* Movie reel decoration */}
+          <View style={styles.reelWrap}>
+            <View style={styles.reelFilm}>
+              {[0, 1, 2, 3, 4].map(i => (
+                <View key={i} style={styles.reelHole} />
+              ))}
+            </View>
+            <View style={styles.reelFrameRow}>
+              {[0, 1, 2].map(i => (
+                <View key={i} style={styles.reelFrame} />
+              ))}
+            </View>
+            <View style={styles.reelFilm}>
+              {[0, 1, 2, 3, 4].map(i => (
+                <View key={i} style={styles.reelHole} />
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.btnGroup}>
+            <TouchableOpacity
+              style={[styles.primaryBtn, gradientBtnStyle]}
+              onPress={() => router.push({ pathname: '/(auth)/sign-up', params: { sessionCode: code } })}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.primaryBtnText}>create an account</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.secondaryBtn}
+              onPress={() => router.push({ pathname: '/(auth)/log-in', params: { sessionCode: code } })}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.secondaryBtnText}>log in</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      </PhoneFrame>
     );
   }
 
-  // Logged in — show loading while joining
+  // ── State B: logged in — joining ─────────────────────────────────────────
+
   return (
-    <View style={[styles.screen, styles.centered, { paddingTop: insets.top }]}>
-      {joining ? (
-        <>
-          <ActivityIndicator color="#6D28D9" />
-          <Text style={styles.joiningText}>joining session {code}…</Text>
-        </>
-      ) : error ? (
-        <>
-          <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity onPress={() => router.replace('/(tabs)/decide')} style={styles.backLink}>
-            <Text style={styles.backLinkText}>go to decide</Text>
-          </TouchableOpacity>
-        </>
-      ) : null}
-    </View>
+    <PhoneFrame>
+      <View style={[styles.screen, styles.centered, { paddingTop: insets.top }]}>
+        {joining ? (
+          <>
+            <ActivityIndicator color="#6D28D9" />
+            <Text style={styles.joiningText}>joining session…</Text>
+          </>
+        ) : error ? (
+          <>
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity
+              style={styles.homeBtn}
+              onPress={() => router.replace('/(tabs)/decide')}
+            >
+              <Text style={styles.homeBtnText}>go home</Text>
+            </TouchableOpacity>
+          </>
+        ) : null}
+      </View>
+    </PhoneFrame>
   );
 }
 
@@ -91,36 +170,66 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   centered: { alignItems: 'center', justifyContent: 'center', gap: 12 },
+
   wordmark: {
     fontSize: 36,
     fontWeight: '200',
-    color: '#4C1D95',
     letterSpacing: 6,
     textAlign: 'center',
-    marginBottom: 48,
   },
-  body: { alignItems: 'center', gap: 16 },
-  inviteText: {
+  invitedLabel: {
     fontSize: 14,
     fontWeight: '300',
     color: '#4C1D95',
     textAlign: 'center',
-    lineHeight: 22,
+    marginTop: 8,
   },
-  sessionCode: {
-    fontSize: 24,
-    fontWeight: '200',
-    color: '#6D28D9',
-    letterSpacing: 6,
+  byLabel: {
+    fontSize: 12,
+    fontWeight: '300',
+    color: '#A78BFA',
     textAlign: 'center',
+    marginTop: 4,
+  },
+
+  // ── Movie reel ──────────────────────────────────────────────────────────────
+  reelWrap: {
+    marginVertical: 36,
+    alignItems: 'center',
+    gap: 4,
+  },
+  reelFilm: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 8,
+  },
+  reelHole: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#DDD6FE',
+  },
+  reelFrameRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  reelFrame: {
+    width: 60,
+    height: 44,
+    borderRadius: 6,
+    backgroundColor: '#EDE9FE',
+  },
+
+  // ── Buttons ──────────────────────────────────────────────────────────────────
+  btnGroup: {
+    alignSelf: 'stretch',
+    gap: 12,
   },
   primaryBtn: {
     height: 52,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 32,
-    alignSelf: 'stretch',
   },
   primaryBtnText: {
     color: '#FFFFFF',
@@ -128,14 +237,35 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     letterSpacing: 0.5,
   },
-  finePrint: {
-    fontSize: 11,
+  secondaryBtn: {
+    height: 52,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryBtnText: {
+    color: '#7C3AED',
+    fontSize: 15,
     fontWeight: '300',
-    color: '#A78BFA',
+    letterSpacing: 0.5,
+  },
+
+  joiningText: { fontSize: 13, fontWeight: '300', color: '#7C3AED' },
+  errorText: {
+    fontSize: 13,
+    fontWeight: '300',
+    color: '#E24B4A',
     textAlign: 'center',
   },
-  joiningText: { fontSize: 13, fontWeight: '300', color: '#7C3AED' },
-  errorText: { fontSize: 13, fontWeight: '300', color: '#E24B4A', textAlign: 'center' },
-  backLink: { marginTop: 8 },
-  backLinkText: { fontSize: 13, color: '#7C3AED', textDecorationLine: 'underline' },
+  homeBtn: {
+    marginTop: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+  },
+  homeBtnText: { fontSize: 13, color: '#7C3AED' },
 });
