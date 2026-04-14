@@ -17,7 +17,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import {
   searchMovies, getTrending, getMovieRecommendations,
-  discoverMoviesByGenres, type MovieResult,
+  discoverMoviesByGenres, fetchMovieRuntime, type MovieResult,
 } from '../../lib/tmdb';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -421,21 +421,41 @@ function LogWatchSheet({ uid, existing, onClose, onSaved }: {
   onClose: () => void;
   onSaved: (entry: WatchEntry) => void;
 }) {
-  const [query, setQuery] = useState(existing?.movieTitle ?? '');
+  const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState<MovieResult[]>([]);
+  const [popularMovies, setPopularMovies] = useState<MovieResult[]>([]);
   const [selected, setSelected] = useState<MovieResult | null>(null);
+  const [runtime, setRuntime] = useState<string | null>(null);
   const [rating, setRating] = useState(existing?.rating ?? 0);
   const [reviewText, setReviewText] = useState(existing?.reviewText ?? '');
   const [saving, setSaving] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Load popular movies on mount
   useEffect(() => {
-    if (query.trim().length < 2) { setResults([]); return; }
+    getTrending(1).then(movies => setPopularMovies(movies.slice(0, 8))).catch(() => {});
+  }, []);
+
+  // Fetch runtime when selected changes
+  useEffect(() => {
+    if (!selected) { setRuntime(null); return; }
+    fetchMovieRuntime(selected.id).then(mins => {
+      if (mins) {
+        const h = Math.floor(mins / 60);
+        const m = mins % 60;
+        setRuntime(h > 0 ? `${h}h ${m}m` : `${m}m`);
+      }
+    }).catch(() => {});
+  }, [selected]);
+
+  // Search debounce
+  useEffect(() => {
+    if (searchQuery.trim().length < 2) { setResults([]); return; }
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
-      try { setResults((await searchMovies(query)).slice(0, 6)); } catch { /* ignore */ }
+      try { setResults((await searchMovies(searchQuery)).slice(0, 6)); } catch { /* ignore */ }
     }, 400);
-  }, [query]);
+  }, [searchQuery]);
 
   const handleSave = async () => {
     if (!selected || rating === 0 || !uid) return;
@@ -461,63 +481,80 @@ function LogWatchSheet({ uid, existing, onClose, onSaved }: {
   };
 
   const canSave = !!selected && rating > 0;
+  const movieList = searchQuery.trim().length >= 2 ? results : popularMovies;
+  const sectionLabel = searchQuery.trim().length >= 2 ? 'RESULTS' : 'POPULAR RIGHT NOW';
+
+  const MagnifyIcon = () => (
+    <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+      <Circle cx={11} cy={11} r={7} stroke="#A78BFA" strokeWidth={1.8} />
+      <Path d="M16.5 16.5L21 21" stroke="#A78BFA" strokeWidth={1.8} strokeLinecap="round" />
+    </Svg>
+  );
 
   const sheetContent = (
     <>
       <View style={styles.sheetHandle} />
       <Text style={styles.sheetTitle}>log a watch</Text>
 
-      {/* STATE B: search bar shows selected movie + "tap to change" */}
-      {selected ? (
-        <TouchableOpacity
-          style={styles.selectedSearchBar}
-          onPress={() => { setSelected(null); setQuery(''); }}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.selectedSearchBarText} numberOfLines={1}>
-            {selected.title}
-            <Text style={styles.selectedSearchBarHint}> · tap to change</Text>
-          </Text>
-        </TouchableOpacity>
-      ) : (
-        <TextInput
-          style={styles.searchInput}
-          placeholder="search for a movie…"
-          placeholderTextColor="#A78BFA"
-          value={query}
-          onChangeText={v => setQuery(v)}
-          autoFocus={!existing}
-        />
+      {/* Search bar — pill shape */}
+      <View style={styles.logSearchBar}>
+        <MagnifyIcon />
+        {selected ? (
+          <>
+            <Text style={styles.logSearchBarSelected} numberOfLines={1}>{selected.title}</Text>
+            <TouchableOpacity
+              onPress={() => { setSelected(null); setSearchQuery(''); setRuntime(null); }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.logSearchBarChange}>change</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <TextInput
+            style={styles.logSearchInput}
+            placeholder="search for a movie..."
+            placeholderTextColor="#A78BFA"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoFocus={!existing}
+          />
+        )}
+      </View>
+
+      {/* State 1 & 2: popular / results list */}
+      {!selected && (
+        <>
+          <Text style={styles.logSectionLabel}>{sectionLabel}</Text>
+          {movieList.map(m => (
+            <TouchableOpacity
+              key={m.id}
+              style={styles.logMovieRow}
+              onPress={() => { setSelected(m); setSearchQuery(''); setResults([]); }}
+              activeOpacity={0.8}
+            >
+              <Poster path={m.posterPath} width={36} height={52} radius={5} />
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={styles.logMovieTitle} numberOfLines={2}>{m.title}</Text>
+                <Text style={styles.logMovieMeta}>
+                  {m.year}{m.genres[0] ? ` · ${GENRE_LABEL_MAP[m.genres[0]] ?? ''}` : ''}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </>
       )}
 
-      {/* STATE A: search results */}
-      {!selected && results.length > 0 && (
-        <Text style={styles.resultsLabel}>results</Text>
-      )}
-      {!selected && results.map(r => (
-        <TouchableOpacity
-          key={r.id}
-          style={styles.searchResult}
-          onPress={() => { setSelected(r); setResults([]); }}
-        >
-          <Text style={styles.searchResultTitle}>{r.title}</Text>
-          <Text style={styles.searchResultYear}>{r.year}</Text>
-        </TouchableOpacity>
-      ))}
-      {!selected && results.length > 0 && (
-        <Text style={styles.searchHint}>tap a result to select</Text>
-      )}
-
-      {/* STATE B: selected movie details */}
+      {/* State 3: selected movie card + rating + review + save */}
       {selected && (
         <>
-          <View style={styles.selectedMovieRow}>
-            <Poster path={selected.posterPath} width={44} height={64} radius={6} />
-            <View style={{ flex: 1, gap: 3 }}>
-              <Text style={styles.selectedTitle}>{selected.title}</Text>
-              <Text style={styles.selectedMeta}>
+          <View style={styles.logSelectedCard}>
+            <Poster path={selected.posterPath} width={60} height={88} radius={8} />
+            <View style={{ flex: 1, gap: 4 }}>
+              <Text style={styles.logSelectedTitle}>{selected.title}</Text>
+              <Text style={styles.logSelectedMeta}>
                 {selected.year}
-                {(selected.genres ?? []).slice(0, 2).map(id => GENRE_LABEL_MAP[id]).filter(Boolean).map(g => ` · ${g}`).join('')}
+                {selected.genres[0] ? ` · ${GENRE_LABEL_MAP[selected.genres[0]] ?? ''}` : ''}
+                {runtime ? ` · ${runtime}` : ''}
               </Text>
             </View>
           </View>
@@ -537,20 +574,19 @@ function LogWatchSheet({ uid, existing, onClose, onSaved }: {
             maxLength={280}
           />
           <Text style={styles.charCount}>{reviewText.length}/280</Text>
+
+          <TouchableOpacity
+            style={[styles.saveBtn, !canSave && styles.saveBtnDisabled, { marginBottom: 16 }]}
+            onPress={handleSave}
+            disabled={!canSave || saving}
+            activeOpacity={0.85}
+          >
+            {saving
+              ? <ActivityIndicator color="#FFF" />
+              : <Text style={styles.saveBtnText}>save to watch history</Text>}
+          </TouchableOpacity>
         </>
       )}
-
-      {/* Save button — always rendered so it stays reachable */}
-      <TouchableOpacity
-        style={[styles.saveBtn, !canSave && styles.saveBtnDisabled, { marginBottom: 16 }]}
-        onPress={handleSave}
-        disabled={!canSave || saving}
-        activeOpacity={0.85}
-      >
-        {saving
-          ? <ActivityIndicator color="#FFF" />
-          : <Text style={styles.saveBtnText}>save to watch history</Text>}
-      </TouchableOpacity>
     </>
   );
 
@@ -1294,41 +1330,45 @@ const styles = StyleSheet.create({
   },
   detailSecondaryBtnText: { color: '#4C1D95', fontSize: 13, fontWeight: '300' },
 
-  // ── Log watch / search ─────────────────────────────────────────────────────
+  // ── Log watch sheet ────────────────────────────────────────────────────────
   searchInputWrap: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: '#F3F0FF', borderRadius: 8,
     paddingHorizontal: 10, height: 40,
   },
   searchIcon: { fontSize: 16, color: '#A78BFA', marginRight: 4 },
-  searchInput: {
-    height: 44, borderWidth: 1, borderColor: '#DDD6FE', borderRadius: 8,
-    paddingHorizontal: 14, fontSize: 13, fontWeight: '300', color: '#4C1D95',
-    backgroundColor: '#F3F0FF',
+  logSearchBar: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#F3F0FF', borderRadius: 22,
+    borderWidth: 1, borderColor: '#DDD6FE',
+    paddingHorizontal: 14, height: 44,
   },
-  resultsLabel: {
-    fontSize: 9, fontWeight: '400', color: '#A78BFA', letterSpacing: 1.5,
-    textTransform: 'uppercase', marginBottom: -4,
+  logSearchInput: {
+    flex: 1, fontSize: 13, fontWeight: '300', color: '#4C1D95',
+    height: 44,
   },
-  searchHint: {
-    fontSize: 10, color: '#C4B5FD', textAlign: 'center', paddingVertical: 8,
-    fontStyle: 'italic',
+  logSearchBarSelected: { flex: 1, fontSize: 13, fontWeight: '300', color: '#4C1D95' },
+  logSearchBarChange: {
+    fontSize: 12, fontWeight: '400', color: '#7C3AED',
+    textDecorationLine: 'underline',
   },
-  selectedSearchBar: {
-    height: 44, borderWidth: 1, borderColor: '#6D28D9', borderRadius: 8,
-    paddingHorizontal: 14, justifyContent: 'center', backgroundColor: '#F3F0FF',
+  logSectionLabel: {
+    fontSize: 9, fontWeight: '400', color: '#A78BFA',
+    letterSpacing: 1.5, textTransform: 'uppercase',
+    marginTop: 4, marginBottom: 2,
   },
-  selectedSearchBarText: { fontSize: 13, fontWeight: '300', color: '#4C1D95' },
-  selectedSearchBarHint: { fontSize: 12, fontWeight: '300', color: '#A78BFA' },
-  searchResult: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F3F0FF',
+  logMovieRow: {
+    flexDirection: 'row', gap: 10, alignItems: 'center',
+    paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#F3F0FF',
   },
-  searchResultTitle: { fontSize: 11, fontWeight: '300', color: '#4C1D95', flex: 1 },
-  searchResultYear: { fontSize: 10, color: '#A78BFA' },
-  selectedMovieRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
-  selectedTitle: { fontSize: 11, fontWeight: '500', color: '#4C1D95' },
-  selectedMeta: { fontSize: 9, color: '#A78BFA' },
+  logMovieTitle: { fontSize: 13, fontWeight: '500', color: '#4C1D95' },
+  logMovieMeta: { fontSize: 10, fontWeight: '300', color: '#A78BFA' },
+  logSelectedCard: {
+    flexDirection: 'row', gap: 12, alignItems: 'flex-start',
+    backgroundColor: '#F3F0FF', borderRadius: 12, padding: 12,
+  },
+  logSelectedTitle: { fontSize: 14, fontWeight: '500', color: '#4C1D95' },
+  logSelectedMeta: { fontSize: 10, fontWeight: '300', color: '#A78BFA', lineHeight: 16 },
   reviewInput: {
     borderWidth: 1, borderColor: '#DDD6FE', borderRadius: 8,
     paddingHorizontal: 14, paddingTop: 10, fontSize: 12, fontWeight: '300', color: '#4C1D95',

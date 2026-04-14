@@ -93,6 +93,14 @@ export async function discoverByGenresFiltered(genreIds: number[], page: number 
   return (data.results as any[]).map(mapMovie);
 }
 
+export async function fetchMovieRuntime(movieId: number): Promise<number | null> {
+  const url = `${TMDB_BASE_URL}/movie/${movieId}?api_key=${TMDB_API_KEY}`;
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  const data = await res.json();
+  return typeof data.runtime === 'number' && data.runtime > 0 ? data.runtime : null;
+}
+
 export async function getMovieRecommendations(movieId: number): Promise<MovieResult[]> {
   const url = `${TMDB_BASE_URL}/movie/${movieId}/recommendations?api_key=${TMDB_API_KEY}`;
   const res = await fetch(url);
