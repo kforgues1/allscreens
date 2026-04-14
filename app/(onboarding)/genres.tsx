@@ -14,7 +14,6 @@ import { doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '../../context/AuthContext';
 import { saveOnboardingData } from '../../lib/userProfile';
 import { GENRES } from '../../constants/genres';
-import ProgressBar from '../../components/ProgressBar';
 import { useTheme } from '../../context/ThemeContext';
 import { db } from '../../lib/firebase';
 
@@ -74,9 +73,6 @@ export default function GenresScreen() {
     router.push({ pathname: '/(onboarding)/streaming', params: { edit: '1' } });
   };
 
-  const handleClose = () => {
-    router.replace('/(tabs)/profile');
-  };
 
   if (initialising) {
     return (
@@ -91,16 +87,15 @@ export default function GenresScreen() {
 
       <View style={[styles.header, { paddingTop: insets.top || 24 }]}>
         <View style={styles.progressRow}>
-          {isEdit && (
-            <TouchableOpacity style={styles.closeBtn} onPress={handleClose} activeOpacity={0.8} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={styles.closeBtnText}>✕</Text>
-            </TouchableOpacity>
-          )}
-          <View style={{ flex: 1 }}>
-            <ProgressBar step={1} />
+          <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={styles.backArrow}>←</Text>
+          </TouchableOpacity>
+          <View style={styles.segmentBarRow}>
+            {[1,2,3,4].map(i => (
+              <View key={i} style={[styles.segmentBar, i <= 1 ? styles.segmentBarFilled : styles.segmentBarEmpty]} />
+            ))}
           </View>
         </View>
-        <View style={{ height: 24 }} />
         <Text style={styles.step}>{isEdit ? 'edit profile' : 'step 1 of 4'}</Text>
         <View style={{ height: 6 }} />
         <Text style={styles.heading}>what do you like to watch?</Text>
@@ -168,22 +163,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    marginBottom: 20,
   },
-  closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#6D28D9',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
+  backArrow: {
+    fontSize: 16,
+    fontWeight: '300',
+    color: '#A78BFA',
+    width: 24,
   },
-  closeBtnText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '400',
-    lineHeight: 16,
+  segmentBarRow: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: 4,
   },
+  segmentBar: {
+    flex: 1,
+    height: 3,
+    borderRadius: 6,
+  },
+  segmentBarFilled: { backgroundColor: '#6D28D9' },
+  segmentBarEmpty: { backgroundColor: '#DDD6FE' },
   step: {
     fontSize: 11,
     fontWeight: '300',

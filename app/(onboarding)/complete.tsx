@@ -4,7 +4,6 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
 import { completeOnboarding } from '../../lib/userProfile';
-import ProgressBar from '../../components/ProgressBar';
 import { useTheme } from '../../context/ThemeContext';
 
 const gradientBtnStyle =
@@ -33,7 +32,16 @@ export default function CompleteScreen() {
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
 
       <View style={[styles.topBar, { paddingTop: insets.top || 24 }]}>
-        <ProgressBar step={4} />
+        <View style={styles.progressRow}>
+          <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={styles.backArrow}>←</Text>
+          </TouchableOpacity>
+          <View style={styles.segmentBarRow}>
+            {[1,2,3,4].map(i => (
+              <View key={i} style={[styles.segmentBar, styles.segmentBarFilled]} />
+            ))}
+          </View>
+        </View>
       </View>
 
       <View style={styles.body}>
@@ -75,6 +83,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
     paddingBottom: 0,
   },
+  progressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 20,
+  },
+  backArrow: {
+    fontSize: 16,
+    fontWeight: '300',
+    color: '#A78BFA',
+    width: 24,
+  },
+  segmentBarRow: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: 4,
+  },
+  segmentBar: {
+    flex: 1,
+    height: 3,
+    borderRadius: 6,
+  },
+  segmentBarFilled: { backgroundColor: '#6D28D9' },
+  segmentBarEmpty: { backgroundColor: '#DDD6FE' },
   body: {
     flex: 1,
     justifyContent: 'center',

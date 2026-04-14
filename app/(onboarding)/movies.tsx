@@ -16,7 +16,6 @@ import { useAuth } from '../../context/AuthContext';
 import { saveOnboardingData } from '../../lib/userProfile';
 import { getTopRatedMovies, searchMovies, MovieResult } from '../../lib/tmdb';
 import { TMDB_IMAGE_BASE } from '../../constants/api';
-import ProgressBar from '../../components/ProgressBar';
 import { useTheme } from '../../context/ThemeContext';
 
 const MAX_SELECTIONS = 5;
@@ -129,8 +128,16 @@ export default function MoviesScreen() {
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
 
       <View style={[styles.header, { paddingTop: insets.top || 24 }]}>
-        <ProgressBar step={2} />
-        <View style={{ height: 24 }} />
+        <View style={styles.progressRow}>
+          <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={styles.backArrow}>←</Text>
+          </TouchableOpacity>
+          <View style={styles.segmentBarRow}>
+            {[1,2,3,4].map(i => (
+              <View key={i} style={[styles.segmentBar, i <= 2 ? styles.segmentBarFilled : styles.segmentBarEmpty]} />
+            ))}
+          </View>
+        </View>
         <Text style={styles.step}>step 2 of 4</Text>
         <View style={{ height: 6 }} />
         <Text style={styles.heading}>movies you love</Text>
@@ -199,6 +206,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
     paddingBottom: 8,
   },
+  progressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 20,
+  },
+  backArrow: {
+    fontSize: 16,
+    fontWeight: '300',
+    color: '#A78BFA',
+    width: 24,
+  },
+  segmentBarRow: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: 4,
+  },
+  segmentBar: {
+    flex: 1,
+    height: 3,
+    borderRadius: 6,
+  },
+  segmentBarFilled: { backgroundColor: '#6D28D9' },
+  segmentBarEmpty: { backgroundColor: '#DDD6FE' },
   step: {
     fontSize: 11,
     fontWeight: '300',

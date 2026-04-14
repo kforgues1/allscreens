@@ -104,7 +104,7 @@ export default function LogInScreen() {
 
         <Text style={[styles.wordmark, wordmarkStyle]}>allscreens</Text>
         <View style={{ height: 10 }} />
-        <Text style={styles.tagline}>decide what to watch. together.</Text>
+        <Text style={styles.tagline}>decide what to watch together</Text>
         <View style={{ height: 52 }} />
 
         <TextInput
