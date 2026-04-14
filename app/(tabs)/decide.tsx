@@ -8,7 +8,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   doc, setDoc, updateDoc, arrayUnion, onSnapshot, getDoc,
 } from 'firebase/firestore';
-import * as Clipboard from 'expo-clipboard';
+const copyToClipboard = (text: string) => {
+  if (Platform.OS === 'web' && typeof navigator !== 'undefined') {
+    navigator.clipboard?.writeText(text);
+  }
+};
 import { db } from '../../lib/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
@@ -379,7 +383,7 @@ function GroupWaiting({
   const canStart = session.members.length >= 2;
 
   const handleCopy = async () => {
-    await Clipboard.setStringAsync(inviteUrl);
+    copyToClipboard(inviteUrl);
   };
 
   const handleShare = () => {
