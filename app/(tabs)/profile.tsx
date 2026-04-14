@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  Modal, StyleSheet, ActivityIndicator,
+  Modal, StyleSheet, ActivityIndicator, Linking,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -293,6 +293,15 @@ export default function ProfileScreen() {
         </View>
       )}
 
+      {/* ── TMDB attribution ── */}
+      <Text style={styles.tmdbAttribution}>
+        movie data provided by{' '}
+        <Text
+          style={styles.tmdbLink}
+          onPress={() => Linking.openURL('https://www.themoviedb.org')}
+        >tmdb</Text>
+      </Text>
+
       <AddFriendSheet
         visible={addFriendOpen}
         onClose={() => setAddFriendOpen(false)}
@@ -400,4 +409,10 @@ const styles = StyleSheet.create({
   signOutConfirmActions: { flexDirection: 'row', gap: 20 },
   signOutConfirmYes: { fontSize: 13, fontWeight: '400', color: '#E24B4A' },
   signOutConfirmCancel: { fontSize: 13, fontWeight: '400', color: '#6D28D9' },
+
+  tmdbAttribution: {
+    fontSize: 10, fontWeight: '300', color: '#A78BFA',
+    textAlign: 'center', marginTop: 16, marginBottom: 8,
+  },
+  tmdbLink: { fontWeight: '400' },
 });
