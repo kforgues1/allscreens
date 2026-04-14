@@ -100,12 +100,16 @@ export default function StreamingScreen() {
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
 
       <View style={[styles.header, { paddingTop: insets.top || 24 }]}>
-        {isEdit && (
-          <TouchableOpacity style={styles.closeBtn} onPress={handleClose} activeOpacity={0.8} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Text style={styles.closeBtnText}>✕</Text>
-          </TouchableOpacity>
-        )}
-        <ProgressBar step={3} />
+        <View style={styles.progressRow}>
+          {isEdit && (
+            <TouchableOpacity style={styles.closeBtn} onPress={handleClose} activeOpacity={0.8} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={styles.closeBtnText}>✕</Text>
+            </TouchableOpacity>
+          )}
+          <View style={{ flex: 1 }}>
+            <ProgressBar step={3} />
+          </View>
+        </View>
         <View style={{ height: 24 }} />
         <Text style={styles.step}>{isEdit ? 'edit profile' : 'step 3 of 4'}</Text>
         <View style={{ height: 6 }} />
@@ -185,17 +189,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
     paddingBottom: 8,
   },
+  progressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
   closeBtn: {
-    position: 'absolute',
-    top: 16,
-    right: 20,
     width: 32,
     height: 32,
     borderRadius: 16,
     backgroundColor: '#6D28D9',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 10,
+    flexShrink: 0,
   },
   closeBtnText: {
     color: '#FFFFFF',
