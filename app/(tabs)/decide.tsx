@@ -488,10 +488,12 @@ function GroupWaiting({
   uid, displayName, onStart, onBack, initialCode,
 }: { uid: string; displayName: string; onStart: (session: Session) => void; onBack: () => void; initialCode?: string }) {
   const [session, setSession] = useState<Session | null>(null);
+  // Stable code state — set once at creation/join, never re-derived from Firestore
+  const [sessionCode, setSessionCode] = useState<string>(initialCode ?? '');
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   // Fix 1+5: refs for code, status, and whether the host deliberately started
-  const codeRef = useRef<string | null>(null);
+  const codeRef = useRef<string | null>(initialCode ?? null);
   const sessionStatusRef = useRef<string>('waiting');
   const startedRef = useRef(false);
   const isHost = !initialCode;
@@ -555,6 +557,7 @@ function GroupWaiting({
           });
 
           if (!cancelled) {
+            setSessionCode(finalCode); // lock in the code — never changes again
             setLoading(false);
             startListening(finalCode);
           }
@@ -587,8 +590,8 @@ function GroupWaiting({
     return <View style={styles.centered}><ActivityIndicator color="#6D28D9" /></View>;
   }
 
-  // Fix 2: invite URL always derived from the Firestore session.code
-  const inviteUrl = `https://kforgues1.github.io/allscreens/join/${session.code}`;
+  // Use stable sessionCode state — immune to Firestore snapshot re-renders
+  const inviteUrl = `https://kforgues1.github.io/allscreens/join/${sessionCode}`;
   const canStart = session.members.length >= 2;
 
   const handleCopy = () => {
@@ -606,7 +609,7 @@ function GroupWaiting({
     }
     // Fix 2: exact share message from spec
     Share.share({
-      message: `join my allscreens session 🎬\n\nhttps://kforgues1.github.io/allscreens/join/${session.code}`,
+      message: `join my allscreens session 🎬\n\nhttps://kforgues1.github.io/allscreens/join/${sessionCode}`,
       url: inviteUrl,
       title: 'join my allscreens session',
     });
