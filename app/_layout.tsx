@@ -17,6 +17,8 @@ function NavController() {
 
     if (!user) {
       if (currentSegment !== '(auth)') router.replace('/(auth)');
+    } else if (currentSegment === 'join') {
+      // Let the join screen handle its own navigation after auth
     } else if (!onboardingComplete) {
       if (currentSegment !== '(onboarding)') router.replace('/(onboarding)/genres');
     } else {
