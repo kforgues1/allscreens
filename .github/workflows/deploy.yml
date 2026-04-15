@@ -32,6 +32,8 @@ jobs:
           EXPO_PUBLIC_TMDB_API_KEY: ${{ secrets.EXPO_PUBLIC_TMDB_API_KEY }}
       - name: Fix asset paths for GitHub Pages subdirectory
         run: sed -i 's|"/_expo/|"/allscreens/_expo/|g; s|href="/favicon.ico"|href="/allscreens/favicon.ico"|g' dist/index.html
+      - name: Add SPA fallback for GitHub Pages deep links
+        run: cp dist/index.html dist/404.html
       - name: Disable Jekyll
         run: touch dist/.nojekyll
       - name: Upload artifact
