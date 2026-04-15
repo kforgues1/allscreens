@@ -142,7 +142,7 @@ function SwipeCardSkeleton() {
     return () => loop.stop();
   }, [anim]);
   return (
-    <ScrollView style={styles.swipeScroll} contentContainerStyle={styles.swipeWrap}>
+    <ScrollView style={styles.swipeScroll} contentContainerStyle={styles.swipeWrap} bounces={false}>
       <Animated.View style={[styles.swipeCard, styles.skeletonCard, { opacity: anim }]}>
         <View style={[styles.swipePoster, styles.skeletonBg]} />
       </Animated.View>
@@ -318,6 +318,7 @@ function SoloSwipe({
       style={styles.swipeScroll}
       contentContainerStyle={styles.swipeWrap}
       showsVerticalScrollIndicator={false}
+      bounces={false}
     >
       {/* Card */}
       <Animated.View
@@ -616,7 +617,7 @@ function GroupWaiting({
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.waitingWrap}>
+    <ScrollView contentContainerStyle={styles.waitingWrap} bounces={false}>
       <TouchableOpacity onPress={onBack} style={styles.backBtn}>
         <Text style={styles.backText}>← back</Text>
       </TouchableOpacity>
@@ -744,6 +745,7 @@ function GroupSwipe({
       style={styles.swipeScroll}
       contentContainerStyle={styles.swipeWrap}
       showsVerticalScrollIndicator={false}
+      bounces={false}
     >
       <Text style={styles.groupBadge}>{session.code} · {session.members.length} people</Text>
       <View style={styles.swipeCard}>
@@ -779,7 +781,7 @@ function GroupResults({
   matched, onBracket, onReset,
 }: { matched: Movie[]; onBracket: () => void; onReset: () => void }) {
   return (
-    <ScrollView contentContainerStyle={styles.groupResultsWrap}>
+    <ScrollView contentContainerStyle={styles.groupResultsWrap} bounces={false}>
       <Text style={styles.groupResultsTitle}>you all want to watch</Text>
       {matched.map(m => (
         <View key={m.id} style={styles.matchedCard}>

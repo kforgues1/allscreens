@@ -202,6 +202,7 @@ export default function ProfileScreen() {
       style={[styles.screen, { backgroundColor: colors.background }]}
       contentContainerStyle={[styles.content, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 100 }]}
       showsVerticalScrollIndicator={false}
+      bounces={false}
     >
       {/* ── Avatar + name ── */}
       <View style={styles.topSection}>

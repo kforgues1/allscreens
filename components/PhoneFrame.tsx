@@ -1,12 +1,16 @@
-import { Platform, View, StyleSheet } from 'react-native';
+import { Platform, View, StyleSheet, useWindowDimensions } from 'react-native';
 
 /**
- * On web: renders children inside a 390×844 iOS device frame
- * centred on an #E9E4FF lavender background.
  * On native: renders children directly with no wrapper.
+ * On real mobile web (width ≤ 480): renders children directly, filling the screen.
+ * On desktop web: renders children inside a 390×844 iOS device frame
+ * centred on an #E9E4FF lavender background.
  */
 export default function PhoneFrame({ children }: { children: React.ReactNode }) {
-  if (Platform.OS !== 'web') return <>{children}</>;
+  const { width } = useWindowDimensions();
+  const isRealMobile = Platform.OS === 'web' && width <= 480;
+
+  if (Platform.OS !== 'web' || isRealMobile) return <>{children}</>;
 
   return (
     <View style={styles.webBg}>
@@ -21,7 +25,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#E9E4FF',
     alignItems: 'center',
     justifyContent: 'center',
-  },
+    ...(Platform.OS === 'web' ? { overscrollBehavior: 'none' } : {}),
+  } as any,
   frame: {
     width: 390,
     height: 844,

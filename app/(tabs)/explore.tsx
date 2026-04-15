@@ -500,6 +500,7 @@ function LogWatchSheet({ uid, existing, onClose, onSaved }: {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.logSheetContent}
+          bounces={false}
         >
           <View style={styles.sheetHandle} />
           <Text style={styles.sheetTitle}>log a watch</Text>
@@ -754,7 +755,7 @@ function DiscoverTab({ uid, onMovieTap }: {
 
   if (loading) {
     return (
-      <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false} bounces={false}>
         <View style={styles.shelf}>
           <SkeletonListCard />
           <SkeletonListCard />
@@ -850,7 +851,7 @@ function FriendsTab({ uid, userInitials, onMovieTap, onAddFriends }: {
 
   return (
     <View style={{ flex: 1 }}>
-      <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false} bounces={false}>
         {/* Add friends pill */}
         <TouchableOpacity style={styles.addFriendsPill} onPress={onAddFriends} activeOpacity={0.8}>
           <Text style={styles.addFriendsPillText}>+ add friends</Text>
@@ -935,7 +936,7 @@ function WatchedTab({ uid, onMovieTap, onLogWatch, onEditWatch }: {
 
   if (loading) {
     return (
-      <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false} bounces={false}>
         <View style={styles.watchGrid}>
           <SkeletonGridCell />
           <SkeletonGridCell />
