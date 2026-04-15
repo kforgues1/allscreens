@@ -17,7 +17,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import {
   searchMovies, getTrending, getMovieRecommendations,
-  discoverMoviesByGenres, fetchMovieRuntime, type MovieResult,
+  discoverMoviesByGenres, fetchMovieRuntime, getPopularMovies, type MovieResult,
 } from '../../lib/tmdb';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -431,9 +431,9 @@ function LogWatchSheet({ uid, existing, onClose, onSaved }: {
   const [saving, setSaving] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load popular movies on mount
+  // Fix 1: Load TMDB popular on mount
   useEffect(() => {
-    getTrending(1).then(movies => setPopularMovies(movies.slice(0, 8))).catch(() => {});
+    getPopularMovies(1).then(movies => setPopularMovies(movies.slice(0, 10))).catch(() => {});
   }, []);
 
   // Fetch runtime when selected changes
@@ -448,13 +448,13 @@ function LogWatchSheet({ uid, existing, onClose, onSaved }: {
     }).catch(() => {});
   }, [selected]);
 
-  // Search debounce
+  // Fix 2: 300ms debounce, 2+ char threshold
   useEffect(() => {
     if (searchQuery.trim().length < 2) { setResults([]); return; }
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
-      try { setResults((await searchMovies(searchQuery)).slice(0, 6)); } catch { /* ignore */ }
-    }, 400);
+      try { setResults((await searchMovies(searchQuery)).slice(0, 8)); } catch { /* ignore */ }
+    }, 300);
   }, [searchQuery]);
 
   const handleSave = async () => {
@@ -491,125 +491,116 @@ function LogWatchSheet({ uid, existing, onClose, onSaved }: {
     </Svg>
   );
 
-  const sheetContent = (
-    <>
-      <View style={styles.sheetHandle} />
-      <Text style={styles.sheetTitle}>log a watch</Text>
-
-      {/* Search bar — pill shape */}
-      <View style={styles.logSearchBar}>
-        <MagnifyIcon />
-        {selected ? (
-          <>
-            <Text style={styles.logSearchBarSelected} numberOfLines={1}>{selected.title}</Text>
-            <TouchableOpacity
-              onPress={() => { setSelected(null); setSearchQuery(''); setRuntime(null); }}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Text style={styles.logSearchBarChange}>change</Text>
-            </TouchableOpacity>
-          </>
-        ) : (
-          <TextInput
-            style={styles.logSearchInput}
-            placeholder="search for a movie..."
-            placeholderTextColor="#A78BFA"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            autoFocus={!existing}
-          />
-        )}
-      </View>
-
-      {/* State 1 & 2: popular / results list */}
-      {!selected && (
-        <>
-          <Text style={styles.logSectionLabel}>{sectionLabel}</Text>
-          {movieList.map(m => (
-            <TouchableOpacity
-              key={m.id}
-              style={styles.logMovieRow}
-              onPress={() => { setSelected(m); setSearchQuery(''); setResults([]); }}
-              activeOpacity={0.8}
-            >
-              <Poster path={m.posterPath} width={36} height={52} radius={5} />
-              <View style={{ flex: 1, gap: 2 }}>
-                <Text style={styles.logMovieTitle} numberOfLines={2}>{m.title}</Text>
-                <Text style={styles.logMovieMeta}>
-                  {m.year}{m.genres[0] ? ` · ${GENRE_LABEL_MAP[m.genres[0]] ?? ''}` : ''}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </>
-      )}
-
-      {/* State 3: selected movie card + rating + review + save */}
-      {selected && (
-        <>
-          <View style={styles.logSelectedCard}>
-            <Poster path={selected.posterPath} width={60} height={88} radius={8} />
-            <View style={{ flex: 1, gap: 4 }}>
-              <Text style={styles.logSelectedTitle}>{selected.title}</Text>
-              <Text style={styles.logSelectedMeta}>
-                {selected.year}
-                {selected.genres[0] ? ` · ${GENRE_LABEL_MAP[selected.genres[0]] ?? ''}` : ''}
-                {runtime ? ` · ${runtime}` : ''}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.ratingRow}>
-            <Text style={styles.ratingLabel}>your rating</Text>
-            <TappableStars rating={rating} onChange={setRating} size={20} />
-          </View>
-
-          <TextInput
-            style={styles.reviewInput}
-            placeholder="add a review (optional)…"
-            placeholderTextColor="#A78BFA"
-            value={reviewText}
-            onChangeText={v => setReviewText(v.slice(0, 280))}
-            multiline
-            maxLength={280}
-          />
-          <Text style={styles.charCount}>{reviewText.length}/280</Text>
-
-          <TouchableOpacity
-            style={[styles.saveBtn, !canSave && styles.saveBtnDisabled, { marginBottom: 16 }]}
-            onPress={handleSave}
-            disabled={!canSave || saving}
-            activeOpacity={0.85}
-          >
-            {saving
-              ? <ActivityIndicator color="#FFF" />
-              : <Text style={styles.saveBtnText}>save to watch history</Text>}
-          </TouchableOpacity>
-        </>
-      )}
-    </>
-  );
-
   return (
     <>
       <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose} />
-      {Platform.OS === 'web' ? (
-        <View style={[styles.sheet, { maxHeight: '75%', overflowY: 'auto' } as any]}>
-          <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-            {sheetContent}
-          </ScrollView>
-        </View>
-      ) : (
-        <KeyboardAvoidingView
-          style={styles.sheet}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={0}
+      {/* Fix 4+5: absolute inside frame, maxHeight 590 so it never overflows */}
+      <View style={styles.logSheet}>
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.logSheetContent}
         >
-          <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-            {sheetContent}
-          </ScrollView>
-        </KeyboardAvoidingView>
-      )}
+          <View style={styles.sheetHandle} />
+          <Text style={styles.sheetTitle}>log a watch</Text>
+
+          {/* Search bar — pill shape */}
+          <View style={styles.logSearchBar}>
+            <MagnifyIcon />
+            {selected ? (
+              <>
+                <Text style={styles.logSearchBarSelected} numberOfLines={1}>{selected.title}</Text>
+                <TouchableOpacity
+                  onPress={() => { setSelected(null); setSearchQuery(''); setRuntime(null); }}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={styles.logSearchBarChange}>change</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <TextInput
+                style={styles.logSearchInput}
+                placeholder="search for a movie..."
+                placeholderTextColor="#A78BFA"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoFocus={!existing}
+              />
+            )}
+          </View>
+
+          {/* Fix 1+2: popular / search results — list grouped so gap only applies around block */}
+          {!selected && (
+            <>
+              <Text style={styles.logSectionLabel}>{sectionLabel}</Text>
+              <View>
+                {movieList.map(m => (
+                  <TouchableOpacity
+                    key={m.id}
+                    style={styles.logMovieRow}
+                    onPress={() => { setSelected(m); setSearchQuery(''); setResults([]); }}
+                    activeOpacity={0.8}
+                  >
+                    <Poster path={m.posterPath} width={36} height={52} radius={5} />
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Text style={styles.logMovieTitle} numberOfLines={1}>{m.title}</Text>
+                      <Text style={styles.logMovieMeta}>
+                        {m.year}{m.genres[0] ? ` · ${GENRE_LABEL_MAP[m.genres[0]] ?? ''}` : ''}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          )}
+
+          {/* Fix 3: selected movie card + rating + review (save button pinned below) */}
+          {selected && (
+            <View style={{ gap: 12 }}>
+              <View style={styles.logSelectedCard}>
+                {/* Fix 3: poster 40×58 */}
+                <Poster path={selected.posterPath} width={40} height={58} radius={6} />
+                <View style={{ flex: 1, gap: 4 }}>
+                  <Text style={styles.logSelectedTitle}>{selected.title}</Text>
+                  <Text style={styles.logSelectedMeta}>
+                    {selected.year}
+                    {selected.genres[0] ? ` · ${GENRE_LABEL_MAP[selected.genres[0]] ?? ''}` : ''}
+                    {runtime ? `\n${runtime}` : ''}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.ratingRow}>
+                <Text style={styles.ratingLabel}>your rating</Text>
+                <TappableStars rating={rating} onChange={setRating} size={20} />
+              </View>
+
+              <TextInput
+                style={styles.reviewInput}
+                placeholder="add a review (optional)…"
+                placeholderTextColor="#A78BFA"
+                value={reviewText}
+                onChangeText={v => setReviewText(v.slice(0, 280))}
+                multiline
+                maxLength={280}
+              />
+              <Text style={styles.charCount}>{reviewText.length}/280</Text>
+            </View>
+          )}
+        </ScrollView>
+
+        {/* Fix 3: save button always pinned at bottom — muted when inactive, gradient when active */}
+        <TouchableOpacity
+          style={[styles.saveBtn, !canSave && styles.saveBtnDisabled, styles.logSaveBtnPinned]}
+          onPress={handleSave}
+          disabled={!canSave || saving}
+          activeOpacity={0.85}
+        >
+          {saving
+            ? <ActivityIndicator color="#FFF" />
+            : <Text style={styles.saveBtnText}>save to watch history</Text>}
+        </TouchableOpacity>
+      </View>
     </>
   );
 }
@@ -1140,7 +1131,7 @@ export default function ExploreScreen() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  screen: { flex: 1 },
+  screen: { flex: 1, overflow: 'hidden' },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
   header: {
@@ -1331,6 +1322,22 @@ const styles = StyleSheet.create({
   detailSecondaryBtnText: { color: '#4C1D95', fontSize: 13, fontWeight: '300' },
 
   // ── Log watch sheet ────────────────────────────────────────────────────────
+  // Fix 4+5: constrained inside frame, never overflows below
+  logSheet: {
+    position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 101,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 16, borderTopRightRadius: 16,
+    borderWidth: 1, borderBottomWidth: 0, borderColor: '#DDD6FE',
+    maxHeight: 590,
+    overflow: 'hidden',
+  },
+  logSheetContent: {
+    padding: 20, paddingBottom: 8, gap: 12,
+  },
+  logSaveBtnPinned: {
+    marginHorizontal: 20, marginBottom: 20, marginTop: 4,
+  },
+
   searchInputWrap: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: '#F3F0FF', borderRadius: 8,
@@ -1359,10 +1366,10 @@ const styles = StyleSheet.create({
   },
   logMovieRow: {
     flexDirection: 'row', gap: 10, alignItems: 'center',
-    paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#F3F0FF',
+    paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: '#F3F0FF',
   },
-  logMovieTitle: { fontSize: 13, fontWeight: '500', color: '#4C1D95' },
-  logMovieMeta: { fontSize: 10, fontWeight: '300', color: '#A78BFA' },
+  logMovieTitle: { fontSize: 12, fontWeight: '500', color: '#4C1D95' },
+  logMovieMeta: { fontSize: 10, fontWeight: '300', color: '#A78BFA', textAlign: 'right' },
   logSelectedCard: {
     flexDirection: 'row', gap: 12, alignItems: 'flex-start',
     backgroundColor: '#F3F0FF', borderRadius: 12, padding: 12,
@@ -1382,7 +1389,7 @@ const styles = StyleSheet.create({
       : { backgroundColor: '#6D28D9' }),
     alignItems: 'center', justifyContent: 'center',
   },
-  saveBtnDisabled: { backgroundColor: '#DDD6FE' },
+  saveBtnDisabled: { backgroundColor: '#A78BFA' },
   saveBtnText: { color: '#FFFFFF', fontSize: 13, fontWeight: '400' },
 
   // ── Add friends sheet ──────────────────────────────────────────────────────

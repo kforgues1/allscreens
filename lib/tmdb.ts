@@ -34,6 +34,14 @@ export async function getTopRatedMovies(page: number = 1): Promise<MovieResult[]
   return (data.results as any[]).map(mapMovie);
 }
 
+export async function getPopularMovies(page: number = 1): Promise<MovieResult[]> {
+  const url = `${TMDB_BASE_URL}/movie/popular?language=en-US&api_key=${TMDB_API_KEY}&page=${page}`;
+  const res = await fetch(url);
+  if (!res.ok) return [];
+  const data = await res.json();
+  return (data.results as any[]).map(mapMovie);
+}
+
 export async function searchMovies(query: string): Promise<MovieResult[]> {
   const encoded = encodeURIComponent(query.trim());
   const url = `${TMDB_BASE_URL}/search/movie?api_key=${TMDB_API_KEY}&query=${encoded}`;

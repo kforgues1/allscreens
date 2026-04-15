@@ -36,6 +36,7 @@ export default function JoinSessionScreen() {
   const [hostName, setHostName] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [joining, setJoining] = useState(false);
+  const [expired, setExpired] = useState(false); // Fix 4: track expiry for CTA label
 
   // Persist the session code to AsyncStorage so it survives the auth flow.
   // Do this as early as possible when the user is not yet logged in.
@@ -70,7 +71,6 @@ export default function JoinSessionScreen() {
     if (!code) {
       code = (await AsyncStorage.getItem(PENDING_KEY).catch(() => null)) ?? '';
     }
-    // Always clear the pending key once we have it
     await AsyncStorage.removeItem(PENDING_KEY).catch(() => {});
 
     if (!code) {
@@ -81,17 +81,50 @@ export default function JoinSessionScreen() {
     setJoining(true);
     try {
       const snap = await getDoc(doc(db, 'sessions', code));
-      if (!snap.exists() || snap.data()?.status === 'ended') {
-        setError("this session has ended or doesn't exist");
+
+      // Fix 3: document must exist
+      if (!snap.exists()) {
+        setError("this session doesn't exist");
         setJoining(false);
         return;
       }
-      const members: string[] = snap.data()?.members ?? [];
-      if (members.length >= 4 && !members.includes(user.uid)) {
+
+      const data = snap.data();
+
+      // Fix 4: check expiry before anything else
+      if (data?.expiresAt && new Date() > data.expiresAt.toDate()) {
+        setError('this session has expired');
+        setExpired(true);
+        setJoining(false);
+        return;
+      }
+
+      // Fix 3: only joinable when status is 'waiting'
+      if (data?.status !== 'waiting') {
+        setError(
+          data?.status === 'ended'
+            ? 'this session has ended'
+            : 'this session has already started'
+        );
+        setJoining(false);
+        return;
+      }
+
+      const members: string[] = data?.members ?? [];
+
+      // Fix 3: already a member — just navigate in without re-adding
+      if (members.includes(user.uid)) {
+        router.replace({ pathname: '/(tabs)/decide', params: { joinCode: code } });
+        return;
+      }
+
+      // Fix 3: cap at 4 members
+      if (members.length >= 4) {
         setError('this session is full');
         setJoining(false);
         return;
       }
+
       const userSnap = await getDoc(doc(db, 'users', user.uid));
       const d = userSnap.data();
       const nameFromParts = `${d?.firstName ?? ''} ${d?.lastName ?? ''}`.trim();
@@ -102,7 +135,6 @@ export default function JoinSessionScreen() {
         members: arrayUnion(user.uid),
         [`memberNames.${user.uid}`]: displayName,
       });
-      // Use replace throughout so the back stack stays clean (Part 6)
       router.replace({ pathname: '/(tabs)/decide', params: { joinCode: code } });
     } catch {
       setError('could not join session — try again');
@@ -190,7 +222,10 @@ export default function JoinSessionScreen() {
               style={styles.homeBtn}
               onPress={() => router.replace('/(tabs)/decide')}
             >
-              <Text style={styles.homeBtnText}>go home</Text>
+              {/* Fix 4: expired sessions get a 'start a new session' CTA */}
+              <Text style={styles.homeBtnText}>
+                {expired ? 'start a new session' : 'go home'}
+              </Text>
             </TouchableOpacity>
           </>
         ) : null}

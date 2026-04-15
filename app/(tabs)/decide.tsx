@@ -9,6 +9,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   doc, setDoc, updateDoc, arrayUnion, onSnapshot, getDoc,
+  serverTimestamp, Timestamp,
 } from 'firebase/firestore';
 const copyToClipboard = (text: string) => {
   if (Platform.OS === 'web' && typeof navigator !== 'undefined') {
@@ -35,14 +36,17 @@ interface Session {
   memberNames?: Record<string, string>;
   members: string[];
   memberProfiles: SessionMember[];
-  status: 'waiting' | 'swiping' | 'done';
+  status: 'waiting' | 'active' | 'swiping' | 'done' | 'ended';
   movies: number[];
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function randomCode(): string {
-  return Math.random().toString(36).slice(2, 7).toUpperCase();
+// Fix 1: timestamp + random suffix guarantees uniqueness
+function generateSessionCode(): string {
+  const ts = Date.now().toString(36).toUpperCase();
+  const rand = Math.random().toString(36).substring(2, 5).toUpperCase();
+  return `${ts}-${rand}`;
 }
 
 function initials(name: string): string {
@@ -486,60 +490,104 @@ function GroupWaiting({
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  // Fix 1+5: refs for code, status, and whether the host deliberately started
+  const codeRef = useRef<string | null>(null);
+  const sessionStatusRef = useRef<string>('waiting');
+  const startedRef = useRef(false);
+  const isHost = !initialCode;
 
   useEffect(() => {
-    let code: string;
+    let cancelled = false;
+    let cleanupListener: (() => void) | null = null;
+
+    const startListening = (code: string) => {
+      cleanupListener = onSnapshot(doc(db, 'sessions', code), async snap => {
+        if (cancelled) return;
+        const data = snap.data() as Session | undefined;
+        if (!data) return;
+        sessionStatusRef.current = data.status; // Fix 5: track live status
+        const profiles: SessionMember[] = await Promise.all(
+          data.members.map(async mUid => {
+            try {
+              const u = await getDoc(doc(db, 'users', mUid));
+              const d = u.data();
+              const nameParts = `${d?.firstName ?? ''} ${d?.lastName ?? ''}`.trim();
+              const name = ((d?.displayName as string | undefined) ?? nameParts) || mUid;
+              return { uid: mUid, name, initials: initials(name) };
+            } catch {
+              return { uid: mUid, name: mUid, initials: '?' };
+            }
+          }),
+        );
+        if (!cancelled) setSession({ ...data, memberProfiles: profiles });
+      });
+    };
 
     if (initialCode) {
-      // Joining an existing session — just listen to it
-      code = initialCode;
-      updateDoc(doc(db, 'sessions', code), {
+      // Joiner: attach to existing session
+      codeRef.current = initialCode;
+      updateDoc(doc(db, 'sessions', initialCode), {
         members: arrayUnion(uid),
         [`memberNames.${uid}`]: displayName,
-      }).catch(() => {}).finally(() => setLoading(false));
+      }).catch(() => {}).finally(() => { if (!cancelled) setLoading(false); });
+      startListening(initialCode);
     } else {
-      // Creating a new session
-      code = randomCode();
-      const newSession: Session = {
-        code,
-        hostUid: uid,
-        hostName: displayName,
-        members: [uid],
-        memberProfiles: [{ uid, name: displayName, initials: initials(displayName) }],
-        memberNames: { [uid]: displayName },
-        status: 'waiting',
-        movies: [],
-      };
-      setDoc(doc(db, 'sessions', code), newSession).then(() => setLoading(false));
+      // Fix 1: host creates session with guaranteed unique code
+      (async () => {
+        try {
+          const code1 = generateSessionCode();
+          const existing = await getDoc(doc(db, 'sessions', code1)).catch(() => null);
+          const finalCode = existing?.exists() ? generateSessionCode() : code1;
+          codeRef.current = finalCode;
+
+          const expiresAt = Timestamp.fromDate(new Date(Date.now() + 24 * 60 * 60 * 1000));
+
+          await setDoc(doc(db, 'sessions', finalCode), {
+            code: finalCode,
+            hostUid: uid,
+            hostName: displayName,
+            members: [uid],
+            memberNames: { [uid]: displayName },
+            status: 'waiting',
+            movies: [],
+            createdAt: serverTimestamp(),
+            expiresAt,
+          });
+
+          if (!cancelled) {
+            setLoading(false);
+            startListening(finalCode);
+          }
+        } catch {
+          if (!cancelled) setLoading(false);
+        }
+      })();
     }
 
-    const unsub = onSnapshot(doc(db, 'sessions', code), async snap => {
-      const data = snap.data() as Session | undefined;
-      if (!data) return;
-
-      // Enrich member profiles
-      const profiles: SessionMember[] = await Promise.all(
-        data.members.map(async mUid => {
-          try {
-            const u = await getDoc(doc(db, 'users', mUid));
-            const d = u.data();
-            const nameParts = `${d?.firstName ?? ''} ${d?.lastName ?? ''}`.trim();
-            const name = ((d?.displayName as string | undefined) ?? nameParts) || mUid;
-            return { uid: mUid, name, initials: initials(name) };
-          } catch {
-            return { uid: mUid, name: mUid, initials: '?' };
-          }
-        }),
-      );
-      setSession({ ...data, memberProfiles: profiles });
-    });
-    return unsub;
+    return () => {
+      cancelled = true;
+      cleanupListener?.();
+      // Fix 5: if host leaves without starting, mark session ended
+      if (isHost && codeRef.current && !startedRef.current && sessionStatusRef.current === 'waiting') {
+        updateDoc(doc(db, 'sessions', codeRef.current), { status: 'ended' }).catch(() => {});
+      }
+    };
   }, [uid, displayName, initialCode]);
+
+  // Fix 5: mark as active before unmounting so cleanup doesn't end it
+  const handleStart = (s: Session) => {
+    startedRef.current = true;
+    if (codeRef.current) {
+      updateDoc(doc(db, 'sessions', codeRef.current), { status: 'active' }).catch(() => {});
+    }
+    onStart(s);
+  };
 
   if (loading || !session) {
     return <View style={styles.centered}><ActivityIndicator color="#6D28D9" /></View>;
   }
 
+  // Fix 2: invite URL always derived from the Firestore session.code
   const inviteUrl = `https://kforgues1.github.io/allscreens/join/${session.code}`;
   const canStart = session.members.length >= 2;
 
@@ -556,8 +604,9 @@ function GroupWaiting({
       setTimeout(() => setCopied(false), 2000);
       return;
     }
+    // Fix 2: exact share message from spec
     Share.share({
-      message: `join my allscreens session 🎬 let's pick something to watch together\n\n${inviteUrl}`,
+      message: `join my allscreens session 🎬\n\nhttps://kforgues1.github.io/allscreens/join/${session.code}`,
       url: inviteUrl,
       title: 'join my allscreens session',
     });
@@ -587,7 +636,7 @@ function GroupWaiting({
         })}
       </View>
 
-      {/* Invite link */}
+      {/* Fix 2: invite pill uses live session.code from Firestore */}
       <TouchableOpacity style={styles.invitePill} onPress={handleCopy} activeOpacity={0.8}>
         <Text style={styles.inviteText}>{inviteUrl}</Text>
         <Text style={styles.copyLabel}>{copied ? 'copied!' : 'tap to copy'}</Text>
@@ -599,7 +648,7 @@ function GroupWaiting({
 
       <TouchableOpacity
         style={[styles.primaryBtn, gradientStyle, !canStart && styles.btnDisabled, { marginTop: 12 }]}
-        onPress={() => onStart(session)}
+        onPress={() => handleStart(session)}
         disabled={!canStart}
         activeOpacity={0.85}
       >
